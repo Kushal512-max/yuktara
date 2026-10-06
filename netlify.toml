@@ -1,0 +1,9 @@
+# Netlify Deployment Configuration for YUKTARA
+[build]
+  publish = "."
+
+# Single Page Application (SPA) redirect rule
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

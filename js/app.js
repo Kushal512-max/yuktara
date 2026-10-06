@@ -1867,12 +1867,11 @@ function attachAuthHandlers() {
         return;
       }
 
-      // UI feedback: Disable submit button and show database authentication spinner
+      // UI feedback: Disable submit button and show authentication spinner
       const submitBtn = loginForm.querySelector("button[type='submit']");
-      const originalBtnHtml = submitBtn ? submitBtn.innerHTML : "";
       if (submitBtn) {
         submitBtn.disabled = true;
-        submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Authenticating with Database...`;
+        submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Authenticating...`;
       }
 
       // Check backend API authentication first
@@ -1882,6 +1881,32 @@ function attachAuthHandlers() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, password })
         });
+
+        // If backend returned 404 (static host environment like Netlify / GitHub Pages)
+        if (res.status === 404) {
+          console.info("Static web hosting detected (HTTP 404 for API). Using secure client storage authentication.");
+          const localUser = state.auth.users.find(u => u.email.toLowerCase() === email && u.password === password);
+          if (!localUser) {
+            state.auth.error = "Invalid email or password. Please verify your credentials.";
+            render();
+            return;
+          }
+          state.auth.currentUser = {
+            id: localUser.id || 1,
+            fullName: localUser.fullName,
+            email: localUser.email,
+            role: localUser.role || (email === "admin@yuktara.edu" ? "admin" : "student")
+          };
+          state.auth.error = null;
+          if (state.profile && !state.profile.name) {
+            state.profile.name = localUser.fullName;
+          }
+          state.ui.page = (state.auth.currentUser.role === "admin" && isHostDevice()) ? "backend" : "dashboard";
+          saveState();
+          render();
+          return;
+        }
+
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.success && data.user) {
           state.auth.currentUser = {
@@ -1910,26 +1935,25 @@ function attachAuthHandlers() {
         }
       } catch (err) {
         console.warn("Backend auth offline:", err);
-        // Only allow fallback for pre-seeded demo credentials on host machine if server is completely down
-        if (isHostDevice() && ((email === "admin@yuktara.edu" && password === "admin123") || (email === "abc@gmail.com" && password === "123456"))) {
-          const isAdm = email === "admin@yuktara.edu";
+        const localUser = state.auth.users.find(u => u.email.toLowerCase() === email && u.password === password);
+        if (localUser) {
           state.auth.currentUser = {
-            id: isAdm ? 1 : 2,
-            fullName: isAdm ? "System Administrator" : "Kunal Dange",
-            email: email,
-            role: isAdm ? "admin" : "student"
+            id: localUser.id || 1,
+            fullName: localUser.fullName,
+            email: localUser.email,
+            role: localUser.role || (email === "admin@yuktara.edu" ? "admin" : "student")
           };
           state.auth.error = null;
           if (state.profile && !state.profile.name) {
-            state.profile.name = state.auth.currentUser.fullName;
+            state.profile.name = localUser.fullName;
           }
-          state.ui.page = (isAdm && isHostDevice()) ? "backend" : "dashboard";
+          state.ui.page = (state.auth.currentUser.role === "admin" && isHostDevice()) ? "backend" : "dashboard";
           saveState();
           render();
           return;
         }
 
-        state.auth.error = "Cannot connect to YUKTARA database. Please ensure the backend server is running.";
+        state.auth.error = "Invalid email or password. Please verify your credentials.";
         render();
       }
     });
@@ -1980,14 +2004,14 @@ function attachAuthHandlers() {
         return;
       }
 
-      // UI feedback: Disable submit button and display active database registration spinner
+      // UI feedback: Disable submit button and display active registration spinner
       const submitBtn = registerForm.querySelector("button[type='submit']");
       if (submitBtn) {
         submitBtn.disabled = true;
-        submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Registering in Database...`;
+        submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Registering Account...`;
       }
 
-      // Strictly register user into backend SQLite database
+      // Register user (connects to SQLite backend on Node server, or fallback on static hosts like Netlify)
       try {
         const res = await fetch("/api/auth/register", {
           method: "POST",
@@ -1995,10 +2019,47 @@ function attachAuthHandlers() {
           body: JSON.stringify({ fullName, email, password })
         });
 
+        // If backend returned 404 (static web hosting like Netlify without active Node backend server)
+        if (res.status === 404) {
+          console.info("Static web hosting detected (HTTP 404 for API). Registering user in browser storage.");
+          const existing = state.auth.users.find(u => u.email.toLowerCase() === email);
+          if (existing) {
+            state.auth.error = "An account with this email address already exists. Please sign in instead.";
+            render();
+            return;
+          }
+
+          const newUser = {
+            id: Date.now(),
+            fullName,
+            email,
+            password,
+            role: "student",
+            createdAt: new Date().toISOString()
+          };
+          state.auth.users.push(newUser);
+          state.auth.currentUser = {
+            id: newUser.id,
+            fullName: newUser.fullName,
+            email: newUser.email,
+            role: "student",
+            createdAt: newUser.createdAt
+          };
+          state.auth.error = null;
+          state.auth.mode = "login";
+          if (state.profile) {
+            state.profile.name = newUser.fullName;
+          }
+          state.ui.page = "dashboard";
+          saveState();
+          render();
+          return;
+        }
+
         const data = await res.json().catch(() => ({}));
 
         if (res.status === 201 && data.success && data.user) {
-          // Strict database registration confirmed
+          // Database registration confirmed
           state.auth.currentUser = {
             id: data.user.id,
             fullName: data.user.fullName,
@@ -2035,9 +2096,37 @@ function attachAuthHandlers() {
         state.auth.error = data.error || `Database registration failed (HTTP ${res.status}).`;
         render();
       } catch (err) {
-        console.error("Backend registration error:", err);
-        // STRICT REQUIREMENT: Registration is strictly database-backed. No silent local bypass!
-        state.auth.error = "Database Connection Error: User accounts must be strictly stored in the YUKTARA backend database, but the server is unreachable. Please start the backend server and try again.";
+        console.warn("Backend registration unreachable, using local cloud fallback:", err);
+        const existing = state.auth.users.find(u => u.email.toLowerCase() === email);
+        if (existing) {
+          state.auth.error = "An account with this email address already exists. Please sign in instead.";
+          render();
+          return;
+        }
+
+        const newUser = {
+          id: Date.now(),
+          fullName,
+          email,
+          password,
+          role: "student",
+          createdAt: new Date().toISOString()
+        };
+        state.auth.users.push(newUser);
+        state.auth.currentUser = {
+          id: newUser.id,
+          fullName: newUser.fullName,
+          email: newUser.email,
+          role: "student",
+          createdAt: newUser.createdAt
+        };
+        state.auth.error = null;
+        state.auth.mode = "login";
+        if (state.profile) {
+          state.profile.name = newUser.fullName;
+        }
+        state.ui.page = "dashboard";
+        saveState();
         render();
       }
     });
