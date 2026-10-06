@@ -1,0 +1,20 @@
+{
+  "name": "yuktara-learning-assistant",
+  "version": "2.0.0",
+  "description": "YUKTARA — AI-powered study planner with YuktaraAI tutor, adaptive quiz system, and full SQLite SQL backend.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "build:bank": "node scripts/compile_question_bank.js"
+  },
+  "keywords": [
+    "education",
+    "learning-assistant",
+    "quiz-system",
+    "sqlite",
+    "node"
+  ],
+  "author": "YUKTARA Team",
+  "license": "MIT"
+}
