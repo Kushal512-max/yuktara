@@ -1,6 +1,15 @@
 node_modules/
 .vscode/
+
+# SQLite files (no longer used — PostgreSQL is the database)
+*.db
 *.db-shm
 *.db-wal
+database/
+
+# Environment secrets — NEVER commit to GitHub
+.env
+
+# OS files
 .DS_Store
 Thumbs.db

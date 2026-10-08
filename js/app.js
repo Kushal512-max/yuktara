@@ -21,21 +21,9 @@ window.addEventListener("scroll", () => {
 }, { passive: true });
 
 const DEFAULT_AUTH = {
-  currentUser: null, // { email: "abc@gmail.com", fullName: "Yuktara Scholar", role: "student" }
-  users: [
-    {
-      fullName: "Yuktara Scholar",
-      email: "abc@gmail.com",
-      password: "123456",
-      role: "student"
-    },
-    {
-      fullName: "System Administrator",
-      email: "admin@yuktara.edu",
-      password: "admin123",
-      role: "admin"
-    }
-  ],
+  currentUser: null,
+  // NOTE: No hardcoded users — PostgreSQL is the ONLY source of truth.
+  // Users are stored in the cloud PostgreSQL database via the backend API.
   mode: "login", // "login" | "register"
   error: null
 };
@@ -94,39 +82,17 @@ function loadState() {
     const merged = { ...structuredClone(DEFAULT_STATE), ...parsed };
     merged.ui = { ...DEFAULT_STATE.ui, ...(parsed.ui || {}) };
 
-    // Auth normalization & default user seeding
+    // Auth normalization — PostgreSQL is the sole source of truth for users.
+    // We only persist the currently-logged-in user session here, not a user list.
     if (!merged.auth) {
       merged.auth = structuredClone(DEFAULT_AUTH);
     } else {
-      if (!Array.isArray(merged.auth.users) || merged.auth.users.length === 0) {
-        merged.auth.users = structuredClone(DEFAULT_AUTH.users);
-      } else {
-        const defaultUserExists = merged.auth.users.some(u => u.email && u.email.toLowerCase() === "abc@gmail.com");
-        if (!defaultUserExists) {
-          merged.auth.users.push({
-            fullName: "Yuktara Scholar",
-            email: "abc@gmail.com",
-            password: "123456",
-            role: "student"
-          });
-        }
-        const adminUserExists = merged.auth.users.some(u => u.email && u.email.toLowerCase() === "admin@yuktara.edu");
-        if (!adminUserExists) {
-          merged.auth.users.push({
-            fullName: "System Administrator",
-            email: "admin@yuktara.edu",
-            password: "admin123",
-            role: "admin"
-          });
-        }
-        // Normalize role on existing users
-        merged.auth.users.forEach(u => {
-          if (!u.role) {
-            u.role = (u.email && u.email.toLowerCase() === "admin@yuktara.edu") ? "admin" : "student";
-          }
-        });
-      }
+      // Drop any legacy localStorage user arrays — they are NOT authoritative.
+      // Authentication must go through the backend API → PostgreSQL.
+      delete merged.auth.users;
+
       if (merged.auth.currentUser) {
+        // Normalize role on the session user (in case of old cached data)
         if (!merged.auth.currentUser.role) {
           merged.auth.currentUser.role = (merged.auth.currentUser.email && merged.auth.currentUser.email.toLowerCase() === "admin@yuktara.edu") ? "admin" : "student";
         }
@@ -175,6 +141,20 @@ function resetAllData() {
 }
 
 function logoutUser() {
+  // Notify backend to log the logout event in PostgreSQL auth_logs
+  try {
+    const email = state.auth && state.auth.currentUser && state.auth.currentUser.email;
+    if (email) {
+      fetch("/api/auth/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email })
+      }).catch(err => console.warn("[AUTH] Logout API notification failed (non-critical):", err));
+    }
+  } catch (e) {
+    console.warn("[AUTH] Logout API call error (non-critical):", e);
+  }
+
   if (state.auth) {
     state.auth.currentUser = null;
     state.auth.error = null;
@@ -191,17 +171,17 @@ function logoutUser() {
    Navigation & Role-Based Access Control
    -------------------------------------------------------------------------- */
 function isHostDevice() {
-  const host = (window.location.hostname || "").toLowerCase();
-  return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "";
+  // On Netlify, admin access is controlled by the PostgreSQL user role, not IP/hostname.
+  // Return true so admin users can access the Backend & DB page from any device.
+  return true;
 }
 
 function isAdmin() {
-  if (!isHostDevice()) return false;
   if (!state || !state.auth || !state.auth.currentUser) return false;
   const cur = state.auth.currentUser;
   const role = (cur.role || "").toLowerCase();
-  const email = (cur.email || "").toLowerCase();
-  return role === "admin" || email === "admin@yuktara.edu";
+  // Admin is determined exclusively by the role stored in PostgreSQL
+  return role === "admin";
 }
 
 const NAV_ITEMS = [
@@ -330,7 +310,7 @@ function toggleSubtopic(topicId, subtopic) {
   render();
   requestAnimationFrame(() => window.scrollTo({ top: currentY, behavior: "instant" }));
 
-  // Asynchronously record study session in SQLite database when marked complete
+  // Asynchronously record study session in PostgreSQL when marked complete
   if (nowDone) {
     try {
       const curUser = state.auth && state.auth.currentUser;
@@ -1616,7 +1596,7 @@ function submitQuiz() {
   render();
   requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "instant" }));
 
-  // Asynchronously record quiz attempt in SQLite database
+  // Asynchronously record quiz attempt in PostgreSQL database
   try {
     const curUser = state.auth && state.auth.currentUser;
     const userEmail = (curUser && curUser.email) || "anonymous";
@@ -1861,11 +1841,7 @@ function attachAuthHandlers() {
       const password = document.getElementById("auth-password").value;
 
       // Restrict admin login strictly to host machine
-      if (email === "admin@yuktara.edu" && !isHostDevice()) {
-        state.auth.error = "Administrator sign-in is strictly restricted to the host computer only.";
-        render();
-        return;
-      }
+      // Admin login is allowed from any device — role is enforced by PostgreSQL
 
       // UI feedback: Disable submit button and show authentication spinner
       const submitBtn = loginForm.querySelector("button[type='submit']");
@@ -1874,7 +1850,7 @@ function attachAuthHandlers() {
         submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Authenticating...`;
       }
 
-      // Check backend API authentication first
+      // Authenticate against the backend API → PostgreSQL (single source of truth)
       try {
         const res = await fetch("/api/auth/login", {
           method: "POST",
@@ -1882,78 +1858,44 @@ function attachAuthHandlers() {
           body: JSON.stringify({ email, password })
         });
 
-        // If backend returned 404 (static host environment like Netlify / GitHub Pages)
         if (res.status === 404) {
-          console.info("Static web hosting detected (HTTP 404 for API). Using secure client storage authentication.");
-          const localUser = state.auth.users.find(u => u.email.toLowerCase() === email && u.password === password);
-          if (!localUser) {
-            state.auth.error = "Invalid email or password. Please verify your credentials.";
-            render();
-            return;
-          }
-          state.auth.currentUser = {
-            id: localUser.id || 1,
-            fullName: localUser.fullName,
-            email: localUser.email,
-            role: localUser.role || (email === "admin@yuktara.edu" ? "admin" : "student")
-          };
-          state.auth.error = null;
-          if (state.profile && !state.profile.name) {
-            state.profile.name = localUser.fullName;
-          }
-          state.ui.page = (state.auth.currentUser.role === "admin" && isHostDevice()) ? "backend" : "dashboard";
-          saveState();
+          // Running on a static host (e.g. Netlify) without a Node backend — show clear message
+          state.auth.error = "The YUKTARA backend server is not running. Please start the Node.js server (npm start) to use this application.";
           render();
           return;
         }
 
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.success && data.user) {
+          // Authenticated successfully via PostgreSQL
           state.auth.currentUser = {
             id: data.user.id,
             fullName: data.user.fullName,
             email: data.user.email,
-            role: data.user.role || (email === "admin@yuktara.edu" ? "admin" : "student")
+            role: data.user.role || "student"
           };
           state.auth.error = null;
           if (state.profile && !state.profile.name) {
             state.profile.name = data.user.fullName;
           }
           // Direct admin to backend explorer, student to dashboard
-          state.ui.page = (state.auth.currentUser.role === "admin" && isHostDevice()) ? "backend" : "dashboard";
+          state.ui.page = (state.auth.currentUser.role === "admin") ? "backend" : "dashboard";
           saveState();
           render();
           return;
         } else if (res.status === 401 || res.status === 403) {
-          state.auth.error = data.error || "Invalid email or password.";
+          state.auth.error = data.error || "Invalid email or password. Please verify your credentials.";
           render();
           return;
         } else {
-          state.auth.error = data.error || `Sign in failed (Server HTTP ${res.status}).`;
+          state.auth.error = data.error || `Sign in failed (Server HTTP ${res.status}). Please try again.`;
           render();
           return;
         }
       } catch (err) {
-        console.warn("Backend auth offline:", err);
-        const localUser = state.auth.users.find(u => u.email.toLowerCase() === email && u.password === password);
-        if (localUser) {
-          state.auth.currentUser = {
-            id: localUser.id || 1,
-            fullName: localUser.fullName,
-            email: localUser.email,
-            role: localUser.role || (email === "admin@yuktara.edu" ? "admin" : "student")
-          };
-          state.auth.error = null;
-          if (state.profile && !state.profile.name) {
-            state.profile.name = localUser.fullName;
-          }
-          state.ui.page = (state.auth.currentUser.role === "admin" && isHostDevice()) ? "backend" : "dashboard";
-          saveState();
-          render();
-          return;
-        }
-
-        state.auth.error = "Invalid email or password. Please verify your credentials.";
+        // Network error — backend is not reachable
+        console.error("[AUTH] Login failed — backend unreachable:", err);
+        state.auth.error = "Cannot connect to the YUKTARA backend server. Please ensure the Node.js server is running (npm start) and try again.";
         render();
       }
     });
@@ -2011,7 +1953,7 @@ function attachAuthHandlers() {
         submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Registering Account...`;
       }
 
-      // Register user (connects to SQLite backend on Node server, or fallback on static hosts like Netlify)
+      // Register user via backend API → INSERT into PostgreSQL (single source of truth)
       try {
         const res = await fetch("/api/auth/register", {
           method: "POST",
@@ -2019,39 +1961,9 @@ function attachAuthHandlers() {
           body: JSON.stringify({ fullName, email, password })
         });
 
-        // If backend returned 404 (static web hosting like Netlify without active Node backend server)
         if (res.status === 404) {
-          console.info("Static web hosting detected (HTTP 404 for API). Registering user in browser storage.");
-          const existing = state.auth.users.find(u => u.email.toLowerCase() === email);
-          if (existing) {
-            state.auth.error = "An account with this email address already exists. Please sign in instead.";
-            render();
-            return;
-          }
-
-          const newUser = {
-            id: Date.now(),
-            fullName,
-            email,
-            password,
-            role: "student",
-            createdAt: new Date().toISOString()
-          };
-          state.auth.users.push(newUser);
-          state.auth.currentUser = {
-            id: newUser.id,
-            fullName: newUser.fullName,
-            email: newUser.email,
-            role: "student",
-            createdAt: newUser.createdAt
-          };
-          state.auth.error = null;
-          state.auth.mode = "login";
-          if (state.profile) {
-            state.profile.name = newUser.fullName;
-          }
-          state.ui.page = "dashboard";
-          saveState();
+          // No Node.js backend running — cannot create accounts
+          state.auth.error = "The YUKTARA backend server is not running. Please start the Node.js server (npm start) or deploy to Netlify. Accounts are stored in PostgreSQL.";
           render();
           return;
         }
@@ -2059,12 +1971,12 @@ function attachAuthHandlers() {
         const data = await res.json().catch(() => ({}));
 
         if (res.status === 201 && data.success && data.user) {
-          // Database registration confirmed
+          // PostgreSQL registration confirmed — set session from the database-returned user record
           state.auth.currentUser = {
             id: data.user.id,
             fullName: data.user.fullName,
             email: data.user.email,
-            role: "student",
+            role: data.user.role || "student",
             createdAt: data.user.createdAt
           };
           state.auth.error = null;
@@ -2093,40 +2005,12 @@ function attachAuthHandlers() {
           return;
         }
 
-        state.auth.error = data.error || `Database registration failed (HTTP ${res.status}).`;
+        state.auth.error = data.error || `Database registration failed (HTTP ${res.status}). Please try again.`;
         render();
       } catch (err) {
-        console.warn("Backend registration unreachable, using local cloud fallback:", err);
-        const existing = state.auth.users.find(u => u.email.toLowerCase() === email);
-        if (existing) {
-          state.auth.error = "An account with this email address already exists. Please sign in instead.";
-          render();
-          return;
-        }
-
-        const newUser = {
-          id: Date.now(),
-          fullName,
-          email,
-          password,
-          role: "student",
-          createdAt: new Date().toISOString()
-        };
-        state.auth.users.push(newUser);
-        state.auth.currentUser = {
-          id: newUser.id,
-          fullName: newUser.fullName,
-          email: newUser.email,
-          role: "student",
-          createdAt: newUser.createdAt
-        };
-        state.auth.error = null;
-        state.auth.mode = "login";
-        if (state.profile) {
-          state.profile.name = newUser.fullName;
-        }
-        state.ui.page = "dashboard";
-        saveState();
+        // Network error — backend is not reachable
+        console.error("[AUTH] Registration failed — backend unreachable:", err);
+        state.auth.error = "Cannot connect to the YUKTARA backend server. Please ensure the Node.js server is running (npm start) or the site is deployed to Netlify. Accounts are stored in PostgreSQL.";
         render();
       }
     });
@@ -3397,7 +3281,7 @@ function renderBackendDataView() {
     <section class="page" id="backendPage">
       <header class="page-header">
         <h1><i class="fa-solid fa-database" style="color:var(--accent);"></i> Backend & SQL Database Explorer</h1>
-        <p class="page-sub">Live view of the YUKTARA SQLite database — Users, Auth Logs, Quiz Attempts & Live SQL Runner.</p>
+        <p class="page-sub">Live view of the YUKTARA PostgreSQL database — Users, Auth Logs, Quiz Attempts & Live SQL Runner.</p>
       </header>
 
       <!-- Summary Cards -->
@@ -3467,7 +3351,7 @@ function renderBackendDataView() {
       <div id="btab-sql" class="backend-sql-panel" style="display:none;">
         <div class="sql-runner-header">
           <i class="fa-solid fa-terminal"></i> Live SQL Query Runner
-          <span class="page-sub" style="font-size:0.8rem;">Run any SELECT, PRAGMA, or safe DDL statement directly on yuktara.db</span>
+          <span class="page-sub" style="font-size:0.8rem;">Run any SELECT query directly against the PostgreSQL database</span>
         </div>
         <div class="sql-editor-wrap">
           <textarea id="sqlQueryInput" class="sql-editor" rows="4" spellcheck="false" placeholder="SELECT * FROM users ORDER BY created_at DESC LIMIT 10;"></textarea>
@@ -3479,7 +3363,7 @@ function renderBackendDataView() {
               <button class="sql-quick" data-query="SELECT * FROM auth_logs ORDER BY id DESC LIMIT 30;">auth_logs</button>
               <button class="sql-quick" data-query="SELECT * FROM quiz_attempts ORDER BY id DESC LIMIT 30;">quiz_attempts</button>
               <button class="sql-quick" data-query="SELECT * FROM study_sessions ORDER BY id DESC LIMIT 30;">study_sessions</button>
-              <button class="sql-quick" data-query="SELECT name FROM sqlite_master WHERE type='table';">tables</button>
+              <button class="sql-quick" data-query="SELECT table_name FROM information_schema.tables WHERE table_schema='public';">tables</button>
             </div>
           </div>
         </div>
@@ -3491,7 +3375,7 @@ function renderBackendDataView() {
       <!-- Connection Info Footer -->
       <div class="backend-footer-info">
         <i class="fa-solid fa-circle" style="color:#22c55e; font-size:0.6rem;"></i>
-        Connected to <code>database/yuktara.db</code> via SQLite (node:sqlite) &middot; Node.js Backend on port 3000
+        Connected to <code>PostgreSQL</code> via Netlify Functions &middot; DATABASE_URL
       </div>
     </section>
   `;
@@ -3594,7 +3478,7 @@ async function loadBackendData() {
     setText("bsc-quiz", s.totalQuizAttempts);
     setText("bsc-sessions", s.totalStudySessions || 0);
     setText("bsc-avg", s.avgScore + "%");
-    setText("bsc-size", s.dbSizeKb + " KB");
+    setText("bsc-size", s.dbSizeKb || s.dbInfo || "PostgreSQL");
 
     // Users table
     const usersPanel = document.getElementById("btab-users");
@@ -3680,7 +3564,7 @@ async function loadBackendData() {
           ])
         );
       } else {
-        sessPanel.innerHTML = `<div style="color:var(--text-muted);text-align:center;padding:24px;font-size:0.9rem;"><i class="fa-solid fa-info-circle"></i> No study sessions recorded yet. Study sessions are logged automatically into SQLite when students mark syllabus topics complete.</div>`;
+        sessPanel.innerHTML = `<div style="color:var(--text-muted);text-align:center;padding:24px;font-size:0.9rem;"><i class="fa-solid fa-info-circle"></i> No study sessions recorded yet. Study sessions are logged automatically into PostgreSQL when students mark syllabus topics complete.</div>`;
       }
     }
 

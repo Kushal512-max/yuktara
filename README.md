@@ -1,47 +1,148 @@
-# YUKTARA — Personalized Learning Assistant
+# YUKTARA — Personalized Learning Assistant & PostgreSQL Backend
 
-A state-of-the-art, high-level GUI study planner, adaptive AI tutor, and intelligent quiz platform built with modern web standards — running completely client-side in the browser with `localStorage` state persistence.
+A state-of-the-art GUI study planner, adaptive AI tutor, and intelligent quiz platform built with modern web standards and powered by a serverless **PostgreSQL** backend deployed on **Netlify Functions**.
+
+---
+
+## 🏗️ Architecture
+
+```
+GitHub Repository
+       ↓
+    Netlify
+   ┌───┴──────────────────────────────┐
+   │                                  │
+   ▼                                  ▼
+Frontend (HTML5 / CSS / Vanilla JS)   Netlify Functions (/api/*)
+   - Glassmorphic UI                  - auth-register (bcrypt hashing)
+   - Adaptive Quiz Engine             - auth-login (bcrypt verification)
+   - YuktaraAI Tutor & Planner        - quiz-attempt & study-session
+   - Backend & DB Admin Dashboard     - admin-data & admin-query
+                                      - admin-export & admin-user-detail
+                                      - health & init-db
+                                                 │
+                                                 ▼
+                                        PostgreSQL Database
+                                  (Cloud: Neon / Supabase / Railway)
+                                  ┌──────────────┼──────────────┐
+                                  ▼              ▼              ▼
+                                users        auth_logs     quiz_attempts
+                                                 │
+                                                 ▼
+                                           study_sessions
+```
+
+- **PostgreSQL as the Single Source of Truth**: All user registrations, logins, quiz attempts, and study sessions are stored directly in PostgreSQL with no local database file fallbacks.
+- **Serverless API**: Netlify Functions handle all API endpoints under `/api/*`.
+- **Identical Local & Production Environment**: The local development server (`server.js`) uses the exact same Netlify Function handlers to ensure 100% feature and behavioral parity.
 
 ---
 
 ## 🌟 Key Features
 
-### 1. High-Level GUI & Modern Visual Design
-- **Glassmorphic UI**: HSL color tokens, backdrop blur filters, smooth card transitions, glowing accents, and micro-interactions.
-- **Dark / Light Theme Toggle**: Instant client-side theme switching with persistent user preference.
-- **Typography & Icons**: Styled with Google Fonts (`Outfit` + `Inter`) and Font Awesome 6 icons.
-- **Responsive Layout**: Adapts smoothly across mobile, tablet, and widescreen desktop monitors.
+### 1. Robust Authentication & Account Persistence
+- **Secure Password Hashing**: Passwords hashed with `bcryptjs` (salt rounds: 12) before storage.
+- **Live User Registration**: Validates name, email, and password, and immediately persists records to PostgreSQL `users`.
+- **Audit Logging**: Every registration and login attempt (success or failure) is logged to `auth_logs` with timestamps, IP address, and status.
+- **Demo Mode**: 1-click demo login available for quick testing.
 
-### 2. Corrected & Enhanced Adaptive Quiz Engine
+### 2. Live Backend & Database Admin Dashboard
+- **Real-Time Analytics**:
+  - Registered Users count
+  - Auth Log Entries count
+  - Quiz Attempts count
+  - Study Sessions count
+  - Average Quiz Score percentage
+- **Interactive Data Views**:
+  - **Users Table**: User ID, full name, email, role, joined date, and last login.
+  - **User Profiles**: Expandable profile cards showing deep analytics per student.
+  - **Auth Logs Table**: Timestamped audit trail of auth activity.
+  - **Quiz Attempts Table**: Subject, topic, score, percentage, mode, and completion time.
+  - **Study Sessions Table**: Subject, subtopic, duration, and status.
+- **Live SQL Query Runner**:
+  - Direct execution of `SELECT` queries against PostgreSQL.
+  - Built-in SQL injection and mutation safeguards (blocks `DROP`, `DELETE`, `TRUNCATE`, `UPDATE`, `INSERT`, `ALTER`).
+  - Pre-set shortcut queries for fast inspection.
+- **Data Export**: 1-click JSON export of the entire database (`/api/admin/export`).
+
+### 3. Adaptive Quiz Engine
 - **5 MCQs Per Quiz**: Every quiz module contains 5 Multiple Choice Questions + Short Answer evaluations.
-- **Practice & Timed Quiz Modes**: Choose between un-timed practice with instant hints or a high-intensity timed evaluation mode with countdown timer.
-- **Draft Auto-Save**: Quiz responses automatically update in `localStorage` — refreshing or navigating away mid-quiz preserves your active answers.
-- **Comprehensive Answer Key & Review Screen**:
-  - Displays every question post-submission with correct answers vs your choices.
-  - Highlights *why* options are correct or incorrect.
-  - Short-answer keyword extraction: displays green chips for matched concepts and orange chips for missed key terms.
-  - One-click **"Ask YuktaraAI Tutor to Explain Why This Choice is Correct"** button.
+- **Practice & Timed Quiz Modes**: Choose between un-timed practice with hints or timed evaluation mode.
+- **Answer Key & Review**: Option-by-option breakdowns, keyword extraction, and score persistence in PostgreSQL.
 
-### 3. Dynamic AI Tutor & Study Planner
-- **Exact Daily Study Time Scheduler**: Dynamically allocates your exact daily study time preference (e.g. 45 mins/day).
-- **Quiz MCQ Explainer Engine**: Paste or ask any quiz question in the AI Tutor to receive a full option-by-option breakdown.
+### 4. Dynamic AI Tutor & Study Planner
+- **Exact Daily Study Time Scheduler**: Dynamically allocates daily study schedules.
+- **Quiz MCQ Explainer Engine**: Deep explanation of questions and options.
 - **Level-Adaptive Tutor**: Tailors explanations to Beginner, Intermediate, or Advanced expertise.
-
-### 4. Client-Side Authentication & Session Management
-- **Login & Registration Flow**: Full authentication system with persistent local user accounts.
-- **Default Demo Credentials**: Pre-configured with email `abc@gmail.com` and password `123456` with a 1-click **"Use Demo"** button.
-- **Self-Registration Form**: Allows new users to sign up with Full Name, Email, Password, and Confirm Password (with client-side validation).
-- **Seamless Profile Binding**: User's registered full name automatically links with their learning plan and YuktaraAI tutor interactions, removing redundant name input on the dashboard.
-- **Session Logout**: Sidebar logout action safely ends active session and returns to login screen.
 
 ---
 
-## 🚀 How to Run Locally
+## 🚀 Local Development Setup
 
-You can open `index.html` directly in any web browser, or serve it locally:
+### Prerequisites
+- [Node.js](https://nodejs.org/) (v18 or higher recommended)
+- A cloud PostgreSQL database URL (from [Neon](https://neon.tech), [Supabase](https://supabase.com), [Railway](https://railway.app), or local PostgreSQL)
 
+### 1. Install Dependencies
 ```bash
-# Using Python 3 HTTP Server
-python3 -m http.server 8080
+npm install
 ```
-Then navigate to `http://localhost:8080` in your browser.
+
+### 2. Configure Environment Variables
+Copy `.env.example` to `.env`:
+```bash
+cp .env.example .env
+```
+Open `.env` and fill in your PostgreSQL connection string:
+```ini
+DATABASE_URL=postgresql://username:password@your-db-host.neon.tech/yuktara?sslmode=require
+INIT_TOKEN=your_optional_secret_token
+```
+
+### 3. Initialize the Database Schema (Optional)
+The schema is automatically created on first function run using idempotent `CREATE TABLE IF NOT EXISTS` statements. You can also run it explicitly:
+```bash
+npm run init-db
+```
+
+### 4. Start the Local Server
+```bash
+npm run dev
+# or
+npm start
+```
+Navigate to `http://localhost:3000` in your browser.
+
+---
+
+## 🌐 Netlify Deployment
+
+1. **Push your code to GitHub** (ensure `.env` is NOT committed; `.gitignore` already protects it).
+2. **Import into Netlify**:
+   - Go to [Netlify](https://app.netlify.com/) → **Add new site** → **Import an existing project**.
+   - Select your GitHub repository.
+3. **Configure Build Settings**:
+   - **Build command**: (leave blank or `npm run build:bank`)
+   - **Publish directory**: `.`
+   - **Functions directory**: `netlify/functions` (automatically read from `netlify.toml`)
+4. **Add Environment Variables in Netlify**:
+   - Go to **Site Configuration** → **Environment variables**.
+   - Add `DATABASE_URL`: Your full cloud PostgreSQL connection string (`postgresql://...`).
+   - Add `INIT_TOKEN`: (Optional) Secret token for manually triggering `/api/init-db`.
+5. **Deploy**:
+   - Click **Deploy Site**. Netlify will build and deploy the frontend and serverless functions.
+   - All `/api/*` endpoints will route directly to the respective functions as configured in `netlify.toml`.
+
+---
+
+## 🔒 Security Best Practices
+- **No Stored Plaintext Passwords**: Passwords hashed with bcrypt cost factor 12.
+- **SQL Injection Immune**: All queries use parameterized statements (`$1`, `$2`, ...).
+- **Environment Secrets Protected**: `.env` and SQLite files are strictly listed in `.gitignore`.
+- **Admin Isolation**: Admin queries and endpoints require admin role authorization (`X-Admin-Email`).
+- **SELECT-Only SQL Console**: Mutation queries are blocked on the SQL runner endpoint to protect data integrity.
+
+---
+
+## 📄 License
+MIT

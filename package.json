@@ -1,20 +1,26 @@
 {
   "name": "yuktara-learning-assistant",
-  "version": "2.0.0",
-  "description": "YUKTARA — AI-powered study planner with YuktaraAI tutor, adaptive quiz system, and full SQLite SQL backend.",
+  "version": "3.0.0",
+  "description": "YUKTARA — AI-powered study planner with YuktaraAI tutor, adaptive quiz system, and PostgreSQL backend via Netlify Functions.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
     "dev": "node server.js",
-    "build:bank": "node scripts/compile_question_bank.js"
+    "start": "node server.js",
+    "build:bank": "node scripts/compile_question_bank.js",
+    "init-db": "node -e \"require('./netlify/functions/db/database').initializeSchema().then(() => { console.log('Schema ready.'); process.exit(0); }).catch(e => { console.error(e); process.exit(1); })\""
   },
   "keywords": [
     "education",
     "learning-assistant",
     "quiz-system",
-    "sqlite",
+    "postgresql",
+    "netlify-functions",
     "node"
   ],
   "author": "YUKTARA Team",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "pg": "^8.13.3"
+  }
 }
