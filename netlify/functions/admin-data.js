@@ -25,7 +25,7 @@ exports.handler = async (event) => {
 
   if (!schemaReady) {
     try { await initializeSchema(); schemaReady = true; } catch (e) {
-      return { statusCode: 503, headers: CORS_HEADERS, body: JSON.stringify({ success: false, error: 'Database not ready.' }) };
+      return { statusCode: 503, headers: CORS_HEADERS, body: JSON.stringify({ success: false, error: e.message || 'Database not ready.' }) };
     }
   }
 
@@ -85,6 +85,6 @@ exports.handler = async (event) => {
     };
   } catch (err) {
     console.error('[ADMIN] Data fetch error:', err.message);
-    return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ success: false, error: 'Failed to load admin data.' }) };
+    return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ success: false, error: err.message || 'Failed to load admin data.' }) };
   }
 };

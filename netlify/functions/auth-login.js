@@ -25,8 +25,19 @@ exports.handler = async (event) => {
   }
 
   if (!schemaReady) {
-    try { await initializeSchema(); schemaReady = true; } catch (e) {
-      return { statusCode: 503, headers: CORS_HEADERS, body: JSON.stringify({ success: false, error: 'Database not ready. Please try again.' }) };
+    try {
+      await initializeSchema();
+      schemaReady = true;
+    } catch (e) {
+      console.error('[AUTH] Schema init failed:', e.message);
+      return {
+        statusCode: 503,
+        headers: CORS_HEADERS,
+        body: JSON.stringify({
+          success: false,
+          error: e.message || 'Database not ready. Please verify DATABASE_URL in Netlify settings.'
+        })
+      };
     }
   }
 
@@ -97,6 +108,6 @@ exports.handler = async (event) => {
     };
   } catch (err) {
     console.error('[AUTH] Login error:', err.message);
-    return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ success: false, error: 'Login failed. Please try again.' }) };
+    return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ success: false, error: err.message || 'Login failed. Please try again.' }) };
   }
 };

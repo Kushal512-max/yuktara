@@ -23,7 +23,7 @@ exports.handler = async (event) => {
 
   if (!schemaReady) {
     try { await initializeSchema(); schemaReady = true; } catch (e) {
-      return { statusCode: 503, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }, body: JSON.stringify({ success: false, error: 'Database not ready.' }) };
+      return { statusCode: 503, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }, body: JSON.stringify({ success: false, error: e.message || 'Database not ready.' }) };
     }
   }
 

@@ -5,27 +5,41 @@
 'use strict';
 
 const { Pool } = require('pg');
+const bcrypt = require('bcryptjs');
 
-if (!process.env.DATABASE_URL) {
-  console.error('[DB] FATAL: DATABASE_URL environment variable is not set.');
-  // Don't throw at module load — let the function handle it gracefully.
+let pool = null;
+
+/**
+ * Returns the active PostgreSQL connection pool.
+ * Initializes lazily to support serverless environment lifecycles.
+ */
+function getPool() {
+  if (pool) return pool;
+
+  const rawUrl = (process.env.DATABASE_URL || '').trim();
+  if (!rawUrl) {
+    throw new Error(
+      'DATABASE_URL environment variable is not configured. ' +
+      'Please set DATABASE_URL in Netlify: Site configuration > Environment variables.'
+    );
+  }
+
+  const isLocal = rawUrl.includes('localhost') || rawUrl.includes('127.0.0.1');
+
+  pool = new Pool({
+    connectionString: rawUrl,
+    ssl: isLocal ? false : { rejectUnauthorized: false },
+    max: 5,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
+  });
+
+  pool.on('error', (err) => {
+    console.error('[DB] Unexpected PostgreSQL pool error:', err.message);
+  });
+
+  return pool;
 }
-
-// Create a connection pool — shared across all function invocations in the same container.
-// SSL is required for cloud PostgreSQL providers (Neon, Supabase, Railway, etc.)
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL && process.env.DATABASE_URL.includes('localhost')
-    ? false
-    : { rejectUnauthorized: false },
-  max: 5,              // max connections in pool (keep low for serverless)
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000,
-});
-
-pool.on('error', (err) => {
-  console.error('[DB] Unexpected PostgreSQL pool error:', err.message);
-});
 
 /**
  * Execute a parameterized query.
@@ -33,17 +47,18 @@ pool.on('error', (err) => {
  * @param {Array}  params - Parameter values (prevents SQL injection)
  * @returns {Promise<import('pg').QueryResult>}
  */
-async function query(text, params) {
+async function query(text, params = []) {
+  const p = getPool();
   const start = Date.now();
   try {
-    const result = await pool.query(text, params);
+    const result = await p.query(text, params);
     const duration = Date.now() - start;
     if (process.env.NODE_ENV !== 'production') {
       console.log(`[DB] Query executed in ${duration}ms | rows: ${result.rowCount}`);
     }
     return result;
   } catch (err) {
-    console.error('[DB] Query error:', err.message, '| Query:', text.substring(0, 100));
+    console.error('[DB] Query error:', err.message, '| Query:', (text || '').substring(0, 100));
     throw err;
   }
 }
@@ -51,7 +66,7 @@ async function query(text, params) {
 /**
  * Get a single row — returns null if not found.
  */
-async function queryOne(text, params) {
+async function queryOne(text, params = []) {
   const result = await query(text, params);
   return result.rows[0] || null;
 }
@@ -59,27 +74,26 @@ async function queryOne(text, params) {
 /**
  * Get all rows.
  */
-async function queryAll(text, params) {
+async function queryAll(text, params = []) {
   const result = await query(text, params);
   return result.rows;
 }
 
 /**
- * Initialize the PostgreSQL schema.
+ * Initialize the PostgreSQL schema and seed demo accounts.
  * Uses CREATE TABLE IF NOT EXISTS — completely safe to run multiple times.
- * Never drops or truncates data.
  */
 async function initializeSchema() {
   console.log('[DB] Initializing PostgreSQL schema (CREATE TABLE IF NOT EXISTS)...');
 
   await query(`
     CREATE TABLE IF NOT EXISTS users (
-      id         BIGSERIAL PRIMARY KEY,
-      name       VARCHAR(255) NOT NULL,
-      email      VARCHAR(255) UNIQUE NOT NULL,
+      id            BIGSERIAL PRIMARY KEY,
+      name          VARCHAR(255) NOT NULL,
+      email         VARCHAR(255) UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
-      role       VARCHAR(50)  NOT NULL DEFAULT 'student',
-      created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+      role          VARCHAR(50)  NOT NULL DEFAULT 'student',
+      created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
       last_login_at TIMESTAMPTZ
     );
   `);
@@ -99,20 +113,20 @@ async function initializeSchema() {
 
   await query(`
     CREATE TABLE IF NOT EXISTS quiz_attempts (
-      id               BIGSERIAL PRIMARY KEY,
-      user_id          BIGINT REFERENCES users(id) ON DELETE SET NULL,
-      user_email       VARCHAR(255) NOT NULL,
-      user_name        VARCHAR(255),
-      subject          TEXT NOT NULL,
-      topic_id         TEXT NOT NULL,
-      topic_name       TEXT NOT NULL,
-      question_count   INTEGER NOT NULL,
-      score            REAL    NOT NULL,
-      percentage       REAL    NOT NULL,
-      mode             VARCHAR(50) NOT NULL,
+      id                 BIGSERIAL PRIMARY KEY,
+      user_id            BIGINT REFERENCES users(id) ON DELETE SET NULL,
+      user_email         VARCHAR(255) NOT NULL,
+      user_name          VARCHAR(255),
+      subject            TEXT NOT NULL,
+      topic_id           TEXT NOT NULL,
+      topic_name         TEXT NOT NULL,
+      question_count     INTEGER NOT NULL,
+      score              REAL    NOT NULL,
+      percentage         REAL    NOT NULL,
+      mode               VARCHAR(50) NOT NULL,
       time_spent_seconds INTEGER,
-      answers_json     TEXT,
-      submitted_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      answers_json       TEXT,
+      submitted_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
 
@@ -137,7 +151,39 @@ async function initializeSchema() {
   await query(`CREATE INDEX IF NOT EXISTS idx_quiz_attempts_user_email ON quiz_attempts(user_email);`);
   await query(`CREATE INDEX IF NOT EXISTS idx_study_sessions_user_email ON study_sessions(user_email);`);
 
+  // Seed default Demo Student account if not present (email: abc@gmail.com, pass: 123456)
+  try {
+    const existingStudent = await queryOne('SELECT id FROM users WHERE email = $1', ['abc@gmail.com']);
+    if (!existingStudent) {
+      const studentHash = await bcrypt.hash('123456', 10);
+      await query(`
+        INSERT INTO users (name, email, password_hash, role, created_at, last_login_at)
+        VALUES ('Demo Student', 'abc@gmail.com', $1, 'student', NOW(), NOW())
+        ON CONFLICT (email) DO NOTHING;
+      `, [studentHash]);
+      console.log('[DB] Demo student account seeded (abc@gmail.com).');
+    }
+  } catch (seedErr) {
+    console.warn('[DB] Could not seed student demo:', seedErr.message);
+  }
+
+  // Seed default Demo Admin account if not present (email: admin@yuktara.edu, pass: admin123)
+  try {
+    const existingAdmin = await queryOne('SELECT id FROM users WHERE email = $1', ['admin@yuktara.edu']);
+    if (!existingAdmin) {
+      const adminHash = await bcrypt.hash('admin123', 10);
+      await query(`
+        INSERT INTO users (name, email, password_hash, role, created_at, last_login_at)
+        VALUES ('System Administrator', 'admin@yuktara.edu', $1, 'admin', NOW(), NOW())
+        ON CONFLICT (email) DO NOTHING;
+      `, [adminHash]);
+      console.log('[DB] Demo admin account seeded (admin@yuktara.edu).');
+    }
+  } catch (seedErr) {
+    console.warn('[DB] Could not seed admin demo:', seedErr.message);
+  }
+
   console.log('[DB] PostgreSQL schema ready.');
 }
 
-module.exports = { query, queryOne, queryAll, initializeSchema, pool };
+module.exports = { query, queryOne, queryAll, initializeSchema, getPool };

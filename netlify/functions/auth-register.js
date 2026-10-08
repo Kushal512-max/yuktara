@@ -26,9 +26,19 @@ exports.handler = async (event) => {
 
   // Ensure schema exists (idempotent — safe to call every time)
   if (!schemaReady) {
-    try { await initializeSchema(); schemaReady = true; } catch (e) {
+    try {
+      await initializeSchema();
+      schemaReady = true;
+    } catch (e) {
       console.error('[REGISTER] Schema init error:', e.message);
-      return { statusCode: 503, headers: CORS_HEADERS, body: JSON.stringify({ success: false, error: 'Database not ready. Please try again.' }) };
+      return {
+        statusCode: 503,
+        headers: CORS_HEADERS,
+        body: JSON.stringify({
+          success: false,
+          error: e.message || 'Database not ready. Please verify DATABASE_URL in Netlify settings.'
+        })
+      };
     }
   }
 
@@ -116,6 +126,6 @@ exports.handler = async (event) => {
     };
   } catch (err) {
     console.error('[AUTH] Registration error (PostgreSQL):', err.message);
-    return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ success: false, error: 'Registration failed. Please try again.' }) };
+    return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ success: false, error: err.message || 'Registration failed. Please try again.' }) };
   }
 };
