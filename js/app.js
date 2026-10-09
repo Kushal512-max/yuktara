@@ -1732,7 +1732,12 @@ function renderAuthPage() {
 
             <div class="field">
               <label for="auth-password">Password</label>
-              <input id="auth-password" type="password" placeholder="••••••••" required autocomplete="current-password" />
+              <div class="password-input-wrap">
+                <input id="auth-password" type="password" placeholder="••••••••" required autocomplete="current-password" />
+                <button type="button" class="password-toggle-btn" data-target="auth-password" aria-label="Show password" title="Show or hide password">
+                  <i class="fa-solid fa-eye"></i>
+                </button>
+              </div>
             </div>
 
             <button type="submit" class="btn-primary" style="width:100%; margin-top:8px; padding:12px;">
@@ -1758,12 +1763,22 @@ function renderAuthPage() {
 
             <div class="field">
               <label for="reg-password">Password</label>
-              <input id="reg-password" type="password" placeholder="Minimum 6 characters" minlength="6" required autocomplete="new-password" />
+              <div class="password-input-wrap">
+                <input id="reg-password" type="password" placeholder="Minimum 6 characters" minlength="6" required autocomplete="new-password" />
+                <button type="button" class="password-toggle-btn" data-target="reg-password" aria-label="Show password" title="Show or hide password">
+                  <i class="fa-solid fa-eye"></i>
+                </button>
+              </div>
             </div>
 
             <div class="field">
               <label for="reg-confirm">Confirm Password</label>
-              <input id="reg-confirm" type="password" placeholder="Re-enter your password" minlength="6" required autocomplete="new-password" />
+              <div class="password-input-wrap">
+                <input id="reg-confirm" type="password" placeholder="Re-enter your password" minlength="6" required autocomplete="new-password" />
+                <button type="button" class="password-toggle-btn" data-target="reg-confirm" aria-label="Show password" title="Show or hide password">
+                  <i class="fa-solid fa-eye"></i>
+                </button>
+              </div>
             </div>
 
             <button type="submit" class="btn-primary" style="width:100%; margin-top:8px; padding:12px;">
@@ -1808,6 +1823,33 @@ function attachAuthHandlers() {
       }
     });
   }
+
+  // Show / Hide password toggles for login and registration forms
+  document.querySelectorAll(".password-toggle-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const targetId = btn.getAttribute("data-target");
+      const input = document.getElementById(targetId);
+      if (!input) return;
+      const icon = btn.querySelector("i");
+      if (input.type === "password") {
+        input.type = "text";
+        if (icon) {
+          icon.classList.remove("fa-eye");
+          icon.classList.add("fa-eye-slash");
+        }
+        btn.setAttribute("aria-label", "Hide password");
+        btn.title = "Hide password";
+      } else {
+        input.type = "password";
+        if (icon) {
+          icon.classList.remove("fa-eye-slash");
+          icon.classList.add("fa-eye");
+        }
+        btn.setAttribute("aria-label", "Show password");
+        btn.title = "Show password";
+      }
+    });
+  });
 
   const tabLoginBtn = document.getElementById("tabLoginBtn");
   if (tabLoginBtn) {
