@@ -36,9 +36,38 @@ function getPool() {
 
   pool.on('error', (err) => {
     console.error('[DB] Unexpected PostgreSQL pool error:', err.message);
+    // Reset pool on fatal connection termination so the next request creates a fresh one
+    pool = null;
   });
 
   return pool;
+}
+
+/**
+ * Classify a database error into a safe, meaningful message for frontend display,
+ * while ensuring sensitive credentials or raw stack traces are never leaked.
+ */
+function classifyDbError(error) {
+  if (!error) return 'An unexpected database error occurred.';
+  const msg = String(error.message || '');
+  const code = String(error.code || '');
+
+  if (msg.includes('DATABASE_URL environment variable is not configured') || !process.env.DATABASE_URL) {
+    return 'Database is not configured. DATABASE_URL environment variable is missing.';
+  }
+  if (msg.includes('password authentication failed') || code === '28P01') {
+    return 'Database authentication failed. The database password in DATABASE_URL is invalid or was reset.';
+  }
+  if (msg.includes('getaddrinfo ENOTFOUND') || msg.includes('ENOTFOUND')) {
+    return 'Database host unreachable. Please verify host and network settings in DATABASE_URL.';
+  }
+  if (msg.includes('Connection terminated') || msg.includes('timeout') || code === '57P01') {
+    return 'Database connection timed out. Please try again.';
+  }
+  if (code === '23505' || msg.includes('duplicate key')) {
+    return 'An account with this email already exists. Please sign in.';
+  }
+  return 'Database operation failed. Please try again shortly.';
 }
 
 /**
@@ -58,7 +87,11 @@ async function query(text, params = []) {
     }
     return result;
   } catch (err) {
-    console.error('[DB] Query error:', err.message, '| Query:', (text || '').substring(0, 100));
+    console.error('[DB] Query error:', err.message, '| Code:', err.code, '| Query:', (text || '').substring(0, 100));
+    // If connection dropped, clear pool reference to allow fresh reconnect
+    if (err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED' || (err.message && err.message.includes('Connection terminated'))) {
+      pool = null;
+    }
     throw err;
   }
 }
@@ -186,4 +219,4 @@ async function initializeSchema() {
   console.log('[DB] PostgreSQL schema ready.');
 }
 
-module.exports = { query, queryOne, queryAll, initializeSchema, getPool };
+module.exports = { query, queryOne, queryAll, initializeSchema, getPool, classifyDbError };

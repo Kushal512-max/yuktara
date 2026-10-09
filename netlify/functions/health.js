@@ -1,9 +1,9 @@
 // netlify/functions/health.js
-// GET /api/health — backend health check
+// GET /api/health — backend and database health check
 
 'use strict';
 
-const { queryOne } = require('./db/database');
+const { queryOne, classifyDbError } = require('./db/database');
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -14,13 +14,17 @@ const CORS_HEADERS = {
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 204, headers: CORS_HEADERS, body: '' };
+    return {
+      statusCode: 204,
+      headers: CORS_HEADERS,
+      body: '',
+    };
   }
 
   const rawUrl = (process.env.DATABASE_URL || '').trim();
-  const hasDbUrl = Boolean(rawUrl);
+  const isConfigured = Boolean(rawUrl);
 
-  if (!hasDbUrl) {
+  if (!isConfigured) {
     return {
       statusCode: 503,
       headers: CORS_HEADERS,
@@ -29,7 +33,7 @@ exports.handler = async (event) => {
         service: 'YUKTARA Backend (Netlify Functions)',
         database: 'PostgreSQL',
         databaseConfigured: false,
-        error: 'DATABASE_URL environment variable is not configured in Netlify. Please add DATABASE_URL in Site configuration > Environment variables.',
+        error: 'DATABASE_URL environment variable is not configured.',
         timestamp: new Date().toISOString(),
       }),
     };
@@ -50,6 +54,8 @@ exports.handler = async (event) => {
       }),
     };
   } catch (err) {
+    console.error('[HEALTH] Database health check failed:', err.message, err.code);
+    const safeError = classifyDbError(err);
     return {
       statusCode: 503,
       headers: CORS_HEADERS,
@@ -58,7 +64,7 @@ exports.handler = async (event) => {
         service: 'YUKTARA Backend (Netlify Functions)',
         database: 'PostgreSQL',
         databaseConfigured: true,
-        error: `Database connection failed: ${err.message}`,
+        error: safeError,
         timestamp: new Date().toISOString(),
       }),
     };
