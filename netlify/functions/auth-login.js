@@ -124,7 +124,7 @@ exports.handler = async (event) => {
       console.warn(`[AUTH-LOGIN] Incorrect password for: ${cleanEmail}`);
       try {
         await query(
-          'INSERT INTO auth_logs (user_id, email, action, ip_address, user_agent, status) VALUES ($1, $2, $3, $4, $5)',
+          'INSERT INTO auth_logs (user_id, email, action, ip_address, user_agent, status) VALUES ($1, $2, $3, $4, $5, $6)',
           [user.id, cleanEmail, 'LOGIN_FAILED', clientIp, userAgent, 'WRONG_PASSWORD']
         );
       } catch (logErr) {
@@ -142,7 +142,7 @@ exports.handler = async (event) => {
     // Record successful login in auth_logs
     try {
       await query(
-        'INSERT INTO auth_logs (user_id, email, action, ip_address, user_agent, status) VALUES ($1, $2, $3, $4, $5)',
+        'INSERT INTO auth_logs (user_id, email, action, ip_address, user_agent, status) VALUES ($1, $2, $3, $4, $5, $6)',
         [user.id, cleanEmail, 'LOGIN_SUCCESS', clientIp, userAgent, 'SUCCESS']
       );
     } catch (logErr) {
