@@ -9,6 +9,8 @@ database/
 
 # Environment secrets — NEVER commit to GitHub
 .env
+.env.*
+.env.txt
 
 # OS files
 .DS_Store

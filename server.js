@@ -32,43 +32,52 @@ try {
 }
 
 if (!process.env.DATABASE_URL) {
-  console.error('');
-  console.error('╔══════════════════════════════════════════════════════════╗');
-  console.error('║  FATAL: DATABASE_URL is not set.                         ║');
-  console.error('║  Create a .env file with your PostgreSQL connection URL: ║');
-  console.error('║  DATABASE_URL=postgresql://user:pass@host:5432/dbname    ║');
-  console.error('╚══════════════════════════════════════════════════════════╝');
-  console.error('');
-  process.exit(1);
+  console.warn('');
+  console.warn('⚠️  NOTICE: DATABASE_URL is not set in environment.');
+  console.warn('   sArathI will run using resilient local data storage.');
+  console.warn('   To sync to cloud PostgreSQL, provide DATABASE_URL in .env');
+  console.warn('');
 }
 
 const PORT = process.env.PORT || 3000;
 
-// Initialize PostgreSQL schema on startup
+// Initialize database schema on startup
 const { initializeSchema } = require('./netlify/functions/db/database');
 initializeSchema()
-  .then(() => console.log('[DB] PostgreSQL schema ready.'))
+  .then(() => console.log('[DB] sArathI database ready.'))
   .catch(err => {
-    console.error('[DB] Schema initialization failed:', err.message);
-    process.exit(1);
+    console.warn('[DB] Schema initialization warning (continuing with resilient fallback):', err.message);
   });
 
-// Import Netlify Function handlers for local use
-const handlers = {
-  '/api/health':               require('./netlify/functions/health').handler,
-  '/api/auth/register':        require('./netlify/functions/auth-register').handler,
-  '/api/auth/login':           require('./netlify/functions/auth-login').handler,
-  '/api/auth/logout':          require('./netlify/functions/auth-logout').handler,
-  '/api/client-context':       require('./netlify/functions/client-context').handler,
-  '/api/quiz/attempt':         require('./netlify/functions/quiz-attempt').handler,
-  '/api/quiz/attempts':        require('./netlify/functions/quiz-attempt').handler,
-  '/api/study/session':        require('./netlify/functions/study-session').handler,
-  '/api/admin/data':           require('./netlify/functions/admin-data').handler,
-  '/api/admin/query':          require('./netlify/functions/admin-query').handler,
-  '/api/admin/export':         require('./netlify/functions/admin-export').handler,
-  '/api/admin/user-detail':    require('./netlify/functions/admin-user-detail').handler,
-  '/api/init-db':              require('./netlify/functions/init-db').handler,
+const HANDLER_MAP = {
+  '/api/health':               './netlify/functions/health',
+  '/api/auth/register':        './netlify/functions/auth-register',
+  '/api/auth/login':           './netlify/functions/auth-login',
+  '/api/auth/logout':          './netlify/functions/auth-logout',
+  '/api/client-context':       './netlify/functions/client-context',
+  '/api/quiz/attempt':         './netlify/functions/quiz-attempt',
+  '/api/quiz/attempts':        './netlify/functions/quiz-attempt',
+  '/api/study/session':        './netlify/functions/study-session',
+  '/api/admin/data':           './netlify/functions/admin-data',
+  '/api/admin/query':          './netlify/functions/admin-query',
+  '/api/admin/export':         './netlify/functions/admin-export',
+  '/api/admin/user-detail':    './netlify/functions/admin-user-detail',
+  '/api/init-db':              './netlify/functions/init-db',
+  '/api/ai/chat':              './netlify/functions/ai-chat',
 };
+
+function getHandler(pathname) {
+  const modPath = HANDLER_MAP[pathname];
+  if (!modPath) return null;
+  try {
+    const resolved = require.resolve(modPath);
+    delete require.cache[resolved];
+    return require(modPath).handler;
+  } catch (err) {
+    console.error(`[SERVER] Error loading handler for ${pathname}:`, err);
+    return null;
+  }
+}
 
 // MIME types for static file serving
 const MIME_TYPES = {
@@ -132,7 +141,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   // Route /api/* to matching Netlify Function handler
-  const handler = handlers[pathname];
+  const handler = getHandler(pathname);
   if (handler) {
     try {
       const body = await readBody(req);
@@ -176,9 +185,10 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log('');
   console.log('=======================================================');
-  console.log('🚀 YUKTARA Local Dev Server Running!');
+  console.log('🚀 sArathI Local Dev Server Running!');
   console.log(`🌐 Local URL:  http://localhost:${PORT}`);
-  console.log('💾 Database:   PostgreSQL (DATABASE_URL)');
+  console.log('💾 Database:   PostgreSQL / Resilient Store');
+  console.log(`🤖 AI Engine:  sArathI Live LLM & Document Q&A Active`);
   console.log(`📊 Health:     http://localhost:${PORT}/api/health`);
   console.log('=======================================================');
   console.log('');

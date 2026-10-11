@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>YUKTARA - Personalized Learning Assistant</title>
-  <meta name="description" content="YUKTARA — AI-powered study planner with YuktaraAI tutor and intelligent quiz system with detailed question reviews." />
+  <title>sArathI - AI-Powered Personalized Learning & Study Companion</title>
+  <meta name="description" content="sArathI — Advanced AI-powered study planner with sArathI AI live LLM tutor, document upload Q&A, and adaptive quiz system." />
   <meta name="theme-color" content="#0b0f19" />
 
   <!-- Google Fonts: Outfit & Inter -->
@@ -15,27 +15,33 @@
   <!-- Font Awesome CDN for clean UI icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous" />
 
+  <!-- PDF.js for in-browser client-side document parsing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
   <!-- App Stylesheet -->
-  <link rel="stylesheet" href="css/style.css?v=2.3" />
+  <link rel="stylesheet" href="css/style.css?v=5.0" />
 </head>
 <body>
   <div id="app">
     <div class="boot-screen">
       <div class="boot-spinner"></div>
-      <p>Initializing YUKTARA…</p>
+      <p>Initializing sArathI…</p>
     </div>
   </div>
 
   <noscript>
     <div class="noscript-warning">
       <h2>JavaScript Required</h2>
-      <p>Please enable JavaScript in your browser to run YUKTARA.</p>
+      <p>Please enable JavaScript in your browser to run sArathI.</p>
     </div>
   </noscript>
 
+  <!-- AI Settings Modal Container -->
+  <div id="aiSettingsModalWrap"></div>
+
   <!-- App Data & Scripts -->
-  <script src="js/data.js?v=2.3"></script>
-  <script src="js/question_bank.js?v=2.3"></script>
-  <script src="js/app.js?v=2.3"></script>
+  <script src="js/data.js?v=5.0"></script>
+  <script src="js/question_bank.js?v=5.0"></script>
+  <script src="js/app.js?v=5.1"></script>
 </body>
 </html>

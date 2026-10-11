@@ -46,7 +46,7 @@ exports.handler = async (event) => {
 
     const dump = {
       exportedAt: new Date().toISOString(),
-      application: 'YUKTARA - Personalized Learning Assistant',
+      application: 'sArathI - Personalized Learning Assistant',
       database: 'PostgreSQL',
       counts: { users: users.length, authLogs: authLogs.length, quizAttempts: quizAttempts.length },
       tables: { users, authLogs, quizAttempts },
@@ -57,7 +57,7 @@ exports.handler = async (event) => {
       headers: {
         ...CORS_HEADERS,
         'Content-Type': 'application/json',
-        'Content-Disposition': 'attachment; filename="yuktara_postgres_export.json"',
+        'Content-Disposition': 'attachment; filename="sarathi_postgres_export.json"',
       },
       body: JSON.stringify(dump, null, 2),
     };

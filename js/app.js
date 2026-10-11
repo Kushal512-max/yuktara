@@ -1,8 +1,8 @@
 /* ==========================================================================
-   js/app.js — Core Application Logic for YUKTARA
+   js/app.js — Core Application Logic for sArathI
    ========================================================================== */
 
-const STORAGE_KEY = "pla_pro_state_v2";
+const STORAGE_KEY = "sarathi_state_v3";
 
 // Universal scroll position memory across all tabs (persisted in-memory per tab)
 const _tabScrollPositions = {
@@ -10,7 +10,8 @@ const _tabScrollPositions = {
   plan: 0,
   tutor: 0,
   quiz: 0,
-  progress: 0
+  progress: 0,
+  backend: 0
 };
 
 // Continuous passive scroll listener to keep the active tab's scroll position strictly up-to-date
@@ -28,9 +29,18 @@ const DEFAULT_AUTH = {
   error: null
 };
 
+const DEFAULT_AI = {
+  provider: "instant-free", // "instant-free" | "gemini" | "groq" | "deepseek"
+  apiKey: "",
+  activeDocument: null,     // { name, size, type, text, wordCount, pageCount }
+  isStreaming: false,
+  autoSpeak: false
+};
+
 const DEFAULT_STATE = {
   theme: "dark",
   auth: structuredClone(DEFAULT_AUTH),
+  ai: structuredClone(DEFAULT_AI),
   profile: null, // { name, subject, level, goal, studyTime, targetDate, createdAt }
   plan: [],      // [{ day, date, topicId, topicName, subtopic, minutes, done }]
   progress: {
@@ -81,20 +91,18 @@ function loadState() {
     const parsed = JSON.parse(raw);
     const merged = { ...structuredClone(DEFAULT_STATE), ...parsed };
     merged.ui = { ...DEFAULT_STATE.ui, ...(parsed.ui || {}) };
+    merged.ai = { ...DEFAULT_STATE.ai, ...(parsed.ai || {}) };
 
     // Auth normalization — PostgreSQL is the sole source of truth for users.
-    // We only persist the currently-logged-in user session here, not a user list.
     if (!merged.auth) {
       merged.auth = structuredClone(DEFAULT_AUTH);
     } else {
-      // Drop any legacy localStorage user arrays — they are NOT authoritative.
-      // Authentication must go through the backend API → PostgreSQL.
       delete merged.auth.users;
 
       if (merged.auth.currentUser) {
-        // Normalize role on the session user (in case of old cached data)
         if (!merged.auth.currentUser.role) {
-          merged.auth.currentUser.role = (merged.auth.currentUser.email && merged.auth.currentUser.email.toLowerCase() === "admin@yuktara.edu") ? "admin" : "student";
+          const em = (merged.auth.currentUser.email || '').toLowerCase();
+          merged.auth.currentUser.role = (em === "admin@sarathi.edu" || em === "admin@yuktara.edu") ? "admin" : "student";
         }
       }
       merged.auth.error = null;
@@ -103,7 +111,7 @@ function loadState() {
 
     // Role-based protection: non-admins cannot stay on backend page
     const cur = merged.auth && merged.auth.currentUser;
-    const isCurAdmin = Boolean(cur && (cur.role === "admin" || (cur.email && cur.email.toLowerCase() === "admin@yuktara.edu")));
+    const isCurAdmin = Boolean(cur && (cur.role === "admin" || (cur.email && (cur.email.toLowerCase() === "admin@sarathi.edu" || cur.email.toLowerCase() === "admin@yuktara.edu"))));
     if (merged.ui && merged.ui.page === "backend" && !isCurAdmin) {
       merged.ui.page = "dashboard";
     }
@@ -187,7 +195,7 @@ function isAdmin() {
 const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: "fa-solid fa-house" },
   { id: "plan", label: "Learning Plan", icon: "fa-solid fa-calendar-check" },
-  { id: "tutor", label: "YuktaraAI", icon: "fa-solid fa-robot" },
+  { id: "tutor", label: "sArathI AI", icon: "fa-solid fa-wand-magic-sparkles" },
   { id: "quiz", label: "Quiz & Review", icon: "fa-solid fa-graduation-cap" },
   { id: "progress", label: "Analytics", icon: "fa-solid fa-chart-line" },
   { id: "backend", label: "Backend & DB", icon: "fa-solid fa-database", adminOnly: true }
@@ -211,6 +219,21 @@ function goTo(page) {
   const targetY = _tabScrollPositions[page] !== undefined ? _tabScrollPositions[page] : 0;
   requestAnimationFrame(() => {
     window.scrollTo({ top: targetY, behavior: "instant" });
+    if (page === "tutor") {
+      scrollChatToBottom(false);
+    }
+  });
+}
+
+function scrollChatToBottom(smooth = true) {
+  requestAnimationFrame(() => {
+    const box = document.getElementById("chatScroll");
+    if (box) {
+      box.scrollTo({
+        top: box.scrollHeight,
+        behavior: smooth ? "smooth" : "auto"
+      });
+    }
   });
 }
 
@@ -483,10 +506,10 @@ const MARATHI_DICTIONARY = [
   [/Hello/gi, "नमस्कार"],
   [/Welcome to your study session!/gi, "तुमच्या अभ्यास सत्रात स्वागत आहे!"],
   [/Welcome to/gi, "स्वागत आहे"],
-  [/I'm YuktaraAI, your 24\/7 personal tutor and study companion\./gi, "मी युक्ताराAI (YuktaraAI), तुमचा २४/७ वैयक्तिक शिक्षक आणि अभ्यास मार्गदर्शक आहे."],
-  [/I'm YuktaraAI/gi, "मी युक्ताराAI आहे"],
-  [/I'm PratejAI, your 24\/7 personal tutor and study companion\./gi, "मी युक्ताराAI (YuktaraAI), तुमचा २४/७ वैयक्तिक शिक्षक आणि अभ्यास मार्गदर्शक आहे."],
-  [/I'm PratejAI/gi, "मी युक्ताराAI आहे"],
+  [/I'm sArathI AI, your 24\/7 personal tutor and study companion\./gi, "मी सारथीAI (sArathI AI), तुमचा २४/७ वैयक्तिक शिक्षक आणि अभ्यास मार्गदर्शक आहे."],
+  [/I'm sArathI AI/gi, "मी सारथीAI आहे"],
+  [/I'm PratejAI, your 24\/7 personal tutor and study companion\./gi, "मी सारथीAI (sArathI AI), तुमचा २४/७ वैयक्तिक शिक्षक आणि अभ्यास मार्गदर्शक आहे."],
+  [/I'm PratejAI/gi, "मी सारथीAI आहे"],
   [/STUDY MOTIVATION FOR YOU:/gi, "तुमच्यासाठी अभ्यासाची प्रेरणा:"],
   [/Success is the sum of small efforts, repeated day in and day out\./gi, "यश म्हणजे दररोज सातत्याने केलेल्या लहान प्रयत्नांची बेरीज."],
   [/Every single topic you master today brings you closer to your dream!/gi, "आज तुम्ही शिकलेला प्रत्येक विषय तुम्हाला स्वप्नांच्या जवळ नेतो!"],
@@ -524,8 +547,8 @@ const MARATHI_DICTIONARY = [
   [/What should I study today\?/gi, "मी आज काय अभ्यास करावा?"],
   [/Show my course plan/gi, "माझा संपूर्ण कोर्स प्लॅन दाखवा"],
   [/What is my profile and goal\?/gi, "माझे प्रोफाईल आणि ध्येय काय आहे?"],
-  [/What is YUKTARA/gi, "युक्तारा (YUKTARA) ॲप काय आहे"],
-  [/What is PRATEJ/gi, "युक्तारा (YUKTARA) ॲप काय आहे"],
+  [/What is sArathI/gi, "सारथी (sArathI) ॲप काय आहे"],
+  [/What is PRATEJ/gi, "सारथी (sArathI) ॲप काय आहे"],
 
   // Dashboard & Navigation
   [/Dashboard/gi, "डॅशबोर्ड (Dashboard)"],
@@ -562,12 +585,12 @@ const MARATHI_DICTIONARY = [
   [/Need this explained line by line\? Just ask!/gi, "हा कोड ओळीनुसार समजून घ्यायचा असल्यास मला नक्की विचारा!"],
 
   // App features & Fallback
-  [/About YUKTARA — Personalized Learning Assistant/gi, "युक्तारा (YUKTARA) बद्दल — वैयक्तिक शिक्षण सहाय्यक"],
-  [/YUKTARA is an intelligent, client-side web application built for personalized self-paced education\./gi, "युक्तारा (YUKTARA) हे वैयक्तिक आणि स्वतःच्या गतीने शिकण्यासाठी तयार केलेले आधुनिक ॲप्लिकेशन आहे."],
+  [/About sArathI — Personalized Learning Assistant/gi, "सारथी (sArathI) बद्दल — वैयक्तिक शिक्षण सहाय्यक"],
+  [/sArathI is an intelligent, client-side web application built for personalized self-paced education\./gi, "सारथी (sArathI) हे वैयक्तिक आणि स्वतःच्या गतीने शिकण्यासाठी तयार केलेले आधुनिक ॲप्लिकेशन आहे."],
   [/Universal Scroll Position Memory/gi, "युनिव्हर्सल स्क्रोल मेमरी (Universal Scroll Memory)"],
-  [/Floating "Ask YuktaraAI" Selector/gi, "फ्लोटिंग \"Ask YuktaraAI\" सिलेक्टर"],
-  [/Universal Tab Scroll Memory in YUKTARA/gi, "युक्तारा (YUKTARA) मधील युनिव्हर्सल स्क्रोल मेमरी"],
-  [/How Quizzes Work in YUKTARA/gi, "युक्तारा (YUKTARA) मध्ये क्विझ कशा काम करतात"],
+  [/Floating "Ask sArathI AI" Selector/gi, "फ्लोटिंग \"Ask sArathI AI\" सिलेक्टर"],
+  [/Universal Tab Scroll Memory in sArathI/gi, "सारथी (sArathI) मधील युनिव्हर्सल स्क्रोल मेमरी"],
+  [/How Quizzes Work in sArathI/gi, "सारथी (sArathI) मध्ये क्विझ कशा काम करतात"],
   [/Practice Mode — 5 MCQs/gi, "सराव पद्धत (Practice Mode — 5 MCQs)"],
   [/Timed Mode/gi, "वेळेवर आधारित परीक्षा (Timed Mode)"],
   [/Quiz Question Explanation/gi, "क्विझ प्रश्न स्पष्टीकरण"],
@@ -580,7 +603,7 @@ const MARATHI_DICTIONARY = [
   [/What should I study today\? — Today's schedule/gi, "मी आज काय अभ्यास करावा? — आजचे वेळापत्रक"],
   [/Show my course plan — Full day-by-day roadmap/gi, "माझा संपूर्ण कोर्स प्लॅन दाखवा — दिवसानुसार योजना"],
   [/How do quizzes work\? — Quiz modes & features/gi, "क्विझ कशा काम करतात? — क्विझ पद्धती आणि वैशिष्ट्ये"],
-  [/What is YUKTARA\? — Full app guide/gi, "युक्तारा (YUKTARA) काय आहे? — संपूर्ण ॲप मार्गदर्शक"]
+  [/What is sArathI\? — Full app guide/gi, "सारथी (sArathI) काय आहे? — संपूर्ण ॲप मार्गदर्शक"]
 ];
 
 function translateToMarathi(text) {
@@ -632,6 +655,125 @@ function translateToEnglish(text) {
   return text;
 }
 
+function generateLocalMarathlishAnswer(userText, qLower, profile) {
+  const name = profile && profile.name ? profile.name.split(' ')[0] : 'मित्रा (Friend)';
+
+  const stripped = qLower
+    .replace(/\b(tula|mala|aamhala|amhi|tumhi|tu|maza|maaza|mazi|maazi|maze|maaze|tujha|tujhi|tujhe|mitra|dost)\b/gi, ' ')
+    .replace(/\b(mahit|mahiti|ahe|aahe|ahat|ahet|ka|kaa|na|pan|pn|tar|tr|madhe|mdhe|sathi|vr|var|pasun|cha|chi|che)\b/gi, ' ')
+    .replace(/\b(mhanje|mhnje|asta|aste|astat|kasa|kashi|kase|kuthun|kuthe|kadhi|kiti|kay|kaay|sang|sanga|sangna|shikav|shikvaycha|karaycha|karayche|karaychi|vapraycha|vaprayche|chalalay|karto|karte|samjun|bol)\b/gi, ' ')
+    .replace(/[!?.,;:]/g, ' ')
+    .trim();
+
+  // Python / Loops
+  if (qLower.includes('loop') || stripped.includes('loop')) {
+    return `### 🐍 Python मध्ये Loops कसे वापरायचे (Loops in Python)
+
+हो **${name}**, मला नक्की माहित आहे! (Ho, mala nakki mahit ahe!)
+
+**Loops म्हणजे काय?**
+जेव्हा आपल्याला एखादा कोड पुन्हा-पुन्हा (repeat) चालवायचा असतो, तेव्हा आपण **Loops** वापरतो. Python मध्ये २ मुख्य प्रकार आहेत:
+
+#### १. \`for\` Loop:
+\`\`\`python
+# 1 ते 5 प्रिंट करणे
+for i in range(1, 6):
+    print(f"Number: {i}")
+\`\`\`
+
+#### २. \`while\` Loop:
+\`\`\`python
+count = 1
+while count <= 3:
+    print(f"Count: {count}")
+    count += 1
+\`\`\`
+
+💡 **लक्षात ठेवा:** Infinite loop टाळण्यासाठी नेहमी counter वाढवावा!`;
+  }
+
+  // Binary Search
+  if (qLower.includes('binary search') || stripped.includes('binary search')) {
+    return `### ⚡ Binary Search म्हणजे काय आणि कसे काम करते?
+
+हो **${name}**, Binary Search ही क्रमबद्ध (Sorted) यादीमधील घटक शोधण्यासाठीचा अत्यंत वेगवान अल्गोरिदम आहे. याची Time Complexity **O(log n)** असते.
+
+#### कार्यपद्धती:
+१. यादीच्या मध्यभागी (Mid) असलेला घटक तपासा.
+२. जर शोधत असलेला नंबर लहान असेल, तर डाव्या अर्ध्या भागात शोधा.
+३. मोठा असेल, तर उजव्या अर्ध्या भागात शोधा.
+
+\`\`\`python
+def binary_search(arr, target):
+    low, high = 0, len(arr) - 1
+    while low <= high:
+        mid = (low + high) // 2
+        if arr[mid] == target:
+            return mid
+        elif arr[mid] < target:
+            low = mid + 1
+        else:
+            high = mid - 1
+    return -1
+\`\`\``;
+  }
+
+  // Recursion
+  if (qLower.includes('recursion') || stripped.includes('recursion')) {
+    return `### 🔁 Recursion म्हणजे काय?
+
+हो **${name}**, जेव्हा एखादे फंक्शन स्वतःलाच पुन्हा कॉल (Call) करते, त्याला **Recursion** म्हणतात.
+
+#### २ महत्त्वाचे नियम:
+१. **Base Condition:** रिकर्शन कधी थांबायचे याची अट.
+२. **Recursive Call:** फंक्शन स्वतःला लहान इनपुटसह पुन्हा कॉल करते.
+
+\`\`\`python
+def factorial(n):
+    if n <= 1:
+        return 1
+    return n * factorial(n - 1)
+\`\`\``;
+  }
+
+  // Database / PostgreSQL
+  if (qLower.includes('database') || qLower.includes('postgres') || qLower.includes('sql') || stripped.includes('database')) {
+    return `### 🗄️ Database आणि sArathI मध्ये डेटा कसा सेव्ह होतो?
+
+हो **${name}**, sArathI मध्ये सर्व माहिती (युझर्स, प्रोफाईल, क्विझचे निकाल) PostgreSQL डेटाबेसमध्ये सुरक्षित सेव्ह होते. डाव्या मेनूमधील **'Backend & DB'** वर क्लिक करून तुम्ही थेट लाईव्ह डेटा पाहू शकता!`;
+  }
+
+  // Identity / Language
+  if (qLower.includes('tu kon ahes') || qLower.includes('tula marathi yete') || qLower.includes('marathi yete ka')) {
+    return `### 🤖 मी sArathI AI (सारथी) आहे!
+
+हो **${name}**, मला मराठी, इंग्लिश आणि Marathlish (मराठी शब्द इंग्लिश लिपीत) **१००% अस्खलित** समजते आणि बोलता येते! तुम्ही इंग्लिश अक्षरांमध्ये मराठी टाइप केले तरी मला पूर्णपणे समजते.`;
+  }
+
+  // Casual Chit-chat
+  if (qLower.includes('kay chalalay') || qLower.includes('kasa ahes') || qLower.includes('kasa aahes')) {
+    return `### 🌟 मी एकदम मस्त आहे! (Mi ekdum mast ahe!)
+
+नमस्कार **${name}**! मी sArathI AI आहे, तुमचा अभ्यासाचा डिजिटल सारथी. आज आपण कोणता विषय शिकणार आहोत? सांगा मला!`;
+  }
+
+  // "tula mahit ahe na"
+  if (qLower.includes('tula mahit ahe na') || qLower.includes('tula mahiti ahe na') || qLower.includes('tula mahit')) {
+    if (stripped.length > 2) {
+      return `### 💡 हो, मला नक्की माहित आहे! (Ho, mala nakki mahit ahe!)
+
+नमस्कार **${name}**! **"${stripped}"** या विषयाबद्दल मी तुम्हाला मराठी आणि इंग्लिश दोन्ही भाषांमध्ये मार्गदर्शन करू शकतो. तुम्हाला या विषयाचे सोपे स्पष्टीकरण, प्रॅक्टिकल कोड किंवा क्विझ हवी आहे का?`;
+    }
+    return `### 🇮🇳 हो, मला नक्की माहित आहे! (Ho, mala nakki mahit ahe!)
+
+नमस्कार **${name}**! हो, मला पूर्णपणे समजते आणि माहित आहे. तुम्ही काय शिकू इच्छिता? Python, Web Development, Algorithms, किंवा डॉक्युमेंट अपलोड करून प्रश्न विचारायचे आहेत?`;
+  }
+
+  return `### 🇮🇳 समजले! (Samajle!)
+
+हो **${name}**, मला तुमचे म्हणणे समजले: *"${userText}"*. मी तुमच्या अभ्यासासाठी सज्ज आहे, काय मदत हवी आहे?`;
+}
+
 function tutorRespond(userText, selectedTopicId, level) {
   const qLower = (userText || "").toLowerCase().trim();
   const asksMarathiDirect = qLower.includes("marathi") || qLower.includes("मराठी") || qLower.includes("translate in marathi") || qLower.includes("in marathi");
@@ -644,6 +786,14 @@ function tutorRespond(userText, selectedTopicId, level) {
     targetDate: formatYMD(new Date()),
     createdAt: new Date().toISOString()
   };
+
+  // 0.0 English-Marathi Mix Language (Marathlish) & Native Marathi Comprehension
+  const isDevanagari = /[\u0900-\u097F]/.test(userText);
+  const isMarathlish = /\b(tula|mala|mahit|ahe|aahe|nahi|kasa|kashi|kay|kaay|sang|shikav|karaycha|vaprayche|chalalay|bol)\b/i.test(qLower);
+  if (isDevanagari || isMarathlish) {
+    const marathlishRes = generateLocalMarathlishAnswer(userText, qLower, profile);
+    if (marathlishRes) return marathlishRes;
+  }
 
   const subject = getSubjectData(profile.subject);
   const plan = state.plan || [];
@@ -691,8 +841,8 @@ function tutorRespond(userText, selectedTopicId, level) {
     cleanQ.includes("good afternoon") ||
     cleanQ.includes("good evening") ||
     cleanQ.includes("good night") ||
-    cleanQ === "hi yuktara" ||
-    cleanQ === "hello yuktara" ||
+    cleanQ === "hi sarathi" || cleanQ === "hi yuktara" ||
+    cleanQ === "hello sarathi" || cleanQ === "hello yuktara" ||
     cleanQ === "hi pratej" ||
     cleanQ === "hello pratej"
   );
@@ -710,7 +860,7 @@ function tutorRespond(userText, selectedTopicId, level) {
 
     return `👋 **Hello, ${fullName}!**
 
-Welcome to your study session! I'm **YuktaraAI**, your 24/7 personal tutor and study companion.
+Welcome to your study session! I'm **sArathI AI**, your 24/7 personal tutor and study companion.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✨ **STUDY MOTIVATION FOR YOU:**
@@ -737,11 +887,11 @@ ${todayItems.length ? `📌 **Today's Focus:** You have **${todayItems.length} s
   if (qLower === "reset all data" || qLower.includes("reset all data")) {
     return `🗑️ **Reset All Data**
 
-The **"Reset All Data"** button (bottom of the sidebar) permanently erases all your YUKTARA data from this browser:
+The **"Reset All Data"** button (bottom of the sidebar) permanently erases all your sArathI data from this browser:
 • ❌ Your profile (name, subject, level, goal, dates)
 • ❌ Your entire learning plan & study schedule
 • ❌ All quiz attempts and scores
-• ❌ The full YuktaraAI chat history
+• ❌ The full sArathI AI chat history
 
 ⚠️ This action is **irreversible**. Only use it if you want a completely fresh start.
 After reset, you will be taken back to the profile setup screen.`;
@@ -750,19 +900,19 @@ After reset, you will be taken back to the profile setup screen.`;
   if (qLower.includes("switch to light mode") || qLower.includes("switch to dark mode") || qLower === "light mode" || qLower === "dark mode" || qLower.includes("theme")) {
     return `🌓 **Theme Toggle — Light & Dark Mode**
 
-YUKTARA supports a **Dark Mode** (default) and a **Light Mode**:
+sArathI supports a **Dark Mode** (default) and a **Light Mode**:
 • Click **"Switch to Light Mode"** (or Dark Mode) in the bottom of the sidebar to toggle instantly.
 • Your preference is **saved automatically** in localStorage so it persists across sessions.
 • The design uses a glassmorphic HSL color system — both themes are premium and fully accessible.`;
   }
 
-  if ((qLower.includes("yuktara") || qLower.includes("pratej")) && qLower.length < 30) {
-    return `🎓 **YUKTARA — Personalized Learning Assistant**
+  if (((qLower.includes("sarathi") || qLower.includes("yuktara")) || qLower.includes("pratej")) && qLower.length < 30) {
+    return `🎓 **sArathI — Personalized Learning Assistant**
 
-YUKTARA is your AI-powered, client-side study platform. It includes:
+sArathI is your AI-powered, client-side study platform. It includes:
 1. 🏠 **Dashboard** — Progress overview & today's focus
 2. 🗓️ **Learning Plan** — Day-by-day personalized schedule
-3. 🤖 **YuktaraAI** — AI tutor (that's me!) aware of your full profile
+3. 🤖 **sArathI AI** — AI tutor (that's me!) aware of your full profile
 4. 🎓 **Quiz & Review** — 5-MCQ adaptive quizzes with review keys
 5. 📊 **Analytics** — Scores, weak topics & attempt history
 
@@ -776,7 +926,7 @@ All data is stored **locally in your browser** — 100% private, no accounts nee
       "quiz & review": "🎓 **Quiz & Review** — Adaptive quiz system. Each topic has 5 MCQs + 1 short answer in **Practice** or **Timed** (180s) mode. After submitting, get a full answer key and option-by-option explanations.",
       "analytics": "📊 **Analytics** — Tracks your full learning journey: completion %, average quiz score, per-topic attempt history, and weak topics (any score below 60%) flagged for revision."
     };
-    return tabInfo[qLower] || `That is one of the 5 navigation tabs in YUKTARA. Ask me "What are the tabs?" for a full overview!`;
+    return tabInfo[qLower] || `That is one of the 5 navigation tabs in sArathI. Ask me "What are the tabs?" for a full overview!`;
   }
 
   if (qLower.includes("edit profile") || qLower === "edit profile") {
@@ -799,10 +949,10 @@ This button on the Dashboard takes you directly to your **Learning Plan** tab wh
   }
 
   if (qLower.includes("revise weak topics") || qLower.includes("weak topics with yuktara") || qLower.includes("weak topics with pratej") || qLower.includes("revise missed")) {
-    return `🔁 **Revise Weak Topics with YuktaraAI**
+    return `🔁 **Revise Weak Topics with sArathI AI**
 
 This button appears when you score below 60% on a quiz topic. Clicking it:
-1. Opens the **YuktaraAI** tab automatically
+1. Opens the **sArathI AI** tab automatically
 2. Sets the topic focus to the weak subject
 3. You can then ask for explanations, code examples, pitfalls, or retry the quiz!`;
   }
@@ -810,7 +960,7 @@ This button appears when you score below 60% on a quiz topic. Clicking it:
   if (qLower.includes("welcome back") || qLower.includes("welcome student") || (qLower.startsWith("welcome") && qLower.length < 40)) {
     return `👋 **Welcome Back, ${fullName}!**
 
-This greeting appears on your **Dashboard** every time you open YUKTARA. It shows your first name pulled from your saved profile.
+This greeting appears on your **Dashboard** every time you open sArathI. It shows your first name pulled from your saved profile.
 
 Your current status:
 • **Course:** ${profile.subject} (${profile.level})
@@ -818,11 +968,11 @@ Your current status:
 • **Target:** ${formatDate(profile.targetDate)}`;
   }
 
-  if (qLower.includes("ask yuktara") || qLower.includes("ask yuktarai") || qLower.includes("ask pratej") || qLower.includes("ask pratejAi") || qLower === "ask yuktara" || qLower === "ask pratej") {
-    return `🤖 **"Ask YuktaraAI" — Text Selection Feature**
+  if ((qLower.includes("ask sarathi") || qLower.includes("ask yuktara")) || qLower.includes("ask yuktarai") || qLower.includes("ask pratej") || qLower.includes("ask pratejAi") || (qLower === "ask sarathi" || qLower === "ask yuktara") || qLower === "ask pratej") {
+    return `🤖 **"Ask sArathI AI" — Text Selection Feature**
 
-Highlight **any text** on any page (a topic name, quiz question, error message, button label, anything!) and a floating **"Ask YuktaraAI"** popup appears. Click it to:
-• Instantly navigate to the YuktaraAI tab
+Highlight **any text** on any page (a topic name, quiz question, error message, button label, anything!) and a floating **"Ask sArathI AI"** popup appears. Click it to:
+• Instantly navigate to the sArathI AI tab
 • Send the selected text as your question
 • Get a smart contextual answer based on what was selected!`;
   }
@@ -830,7 +980,7 @@ Highlight **any text** on any page (a topic name, quiz question, error message, 
   if (qLower.includes("practice") && qLower.includes("mcq") || qLower === "practice (5 mcqs)") {
     return `✅ **Practice Mode — 5 MCQs**
 
-Practice mode is the default quiz experience in YUKTARA:
+Practice mode is the default quiz experience in sArathI:
 • **Untimed** — no pressure, learn at your own pace
 • **5 Multiple Choice Questions** covering the topic's core concepts
 • **1 Short Answer** graded by keyword matching
@@ -855,7 +1005,7 @@ Timed mode simulates a real exam environment:
     const { mcq, topic: mcqTopic } = matchedMCQ;
     const correctOpt = mcq.options[mcq.answer];
 
-    return `🤖 **YuktaraAI — Quiz Question Explanation**
+    return `🤖 **sArathI AI — Quiz Question Explanation**
 
 **Topic:** ${mcqTopic.name}
 **Question:** "${mcq.q}"
@@ -886,7 +1036,7 @@ ${mcq.options.map((opt, idx) => {
   ) {
     return `👤 **Hello ${fullName}!** 👋
 
-Yes, I know you very well! Your registered profile in YUKTARA is:
+Yes, I know you very well! Your registered profile in sArathI is:
 
 • **Full Name:** ${fullName}
 • **Enrolled Course:** ${profile.subject}
@@ -896,7 +1046,7 @@ Yes, I know you very well! Your registered profile in YUKTARA is:
 • **Personal Learning Goal:** "${profile.goal}"
 • **Current Progress:** ${percentComplete}% completed (${completedCount} of ${totalSubtopics} subtopics done)
 
-Whenever you have any questions about your course, schedule, or YUKTARA features, I'm here to help, ${firstName}!`;
+Whenever you have any questions about your course, schedule, or sArathI features, I'm here to help, ${firstName}!`;
   }
 
   // 3. User Profile / Details / Goal / Dates
@@ -1084,7 +1234,7 @@ Go to the **Learning Plan** tab to see all subtopic checkboxes and track your st
 ${firstIncomplete ? `📌 **Next Up on Your Roadmap:**\n• **Day ${firstIncomplete.day} (${formatDate(firstIncomplete.date)})**\n• **Topic:** ${firstIncomplete.topicName}\n• **Subtopic:** ${firstIncomplete.subtopic} (${firstIncomplete.minutes} mins)` : "🎉 All scheduled subtopics are completed! You're ready for final quiz assessments!"}`;
   }
 
-  // 9. What is YUKTARA / About App / Features / How it works
+  // 9. What is sArathI / About App / Features / How it works
   if (
     qLower.includes("what is yuktara") ||
     qLower.includes("about yuktara") ||
@@ -1104,19 +1254,19 @@ ${firstIncomplete ? `📌 **Next Up on Your Roadmap:**\n• **Day ${firstIncompl
     qLower.includes("how does pratej work") ||
     qLower.includes("app feature")
   ) {
-    return `🌟 **About YUKTARA — Personalized Learning Assistant**
+    return `🌟 **About sArathI — Personalized Learning Assistant**
 
-**YUKTARA** is an intelligent, client-side web application built for personalized self-paced education. It combines automated study scheduling, AI-assisted tutoring, interactive assessments, and deep progress analytics.
+**sArathI** is an intelligent, client-side web application built for personalized self-paced education. It combines automated study scheduling, AI-assisted tutoring, interactive assessments, and deep progress analytics.
 
 **Key Architecture & App Features:**
 1. 🏠 **Dashboard**: Your command center showing overall progress, daily streak, quiz performance, today's focus tasks, and weak topic alerts.
 2. 🗓️ **Learning Plan**: An intelligent algorithm that calculates your exact daily study schedule based on your target date, available minutes (${profile.studyTime}m/day), and skill level. Features interactive checkboxes for completion tracking.
-3. 🤖 **YuktaraAI Tutor**: Context-aware AI assistant (that's me!) with level-adaptive explanations, code snippets, common pitfalls, analogies, full profile awareness, and MCQ review keys.
+3. 🤖 **sArathI AI Tutor**: Context-aware AI assistant (that's me!) with level-adaptive explanations, code snippets, common pitfalls, analogies, full profile awareness, and MCQ review keys.
 4. 🎓 **Adaptive Quiz System**: 5 MCQs + short-answer evaluations per topic. Offers both **Practice Mode** and a high-intensity **Timed Mode** (180s countdown), draft auto-save, and question-by-question review keys.
 5. 📊 **Analytics**: Tracks completion percentage, average quiz scores, weak topic detection (<60%), and full attempt history.
 6. 🔒 **Local Persistence**: All your data is saved in your browser's \`localStorage\` (\`pla_pro_state_v2\`). Your profile, quiz history, and chat stay private on your device.
-7. 📌 **Universal Scroll Position Memory**: YUKTARA saves and restores your exact scroll position across every tab so you never lose your place!
-8. ✨ **Floating "Ask YuktaraAI" Selector**: Highlight any text on any page to open a quick popup that brings you directly here with the question ready!
+7. 📌 **Universal Scroll Position Memory**: sArathI saves and restores your exact scroll position across every tab so you never lose your place!
+8. ✨ **Floating "Ask sArathI AI" Selector**: Highlight any text on any page to open a quick popup that brings you directly here with the question ready!
 9. 🌓 **Dark / Light Mode**: Instant theme switching with custom glassmorphic styling and HSL tokens.`;
   }
 
@@ -1126,12 +1276,12 @@ ${firstIncomplete ? `📌 **Next Up on Your Roadmap:**\n• **Day ${firstIncompl
     qLower.includes("what are the tabs") ||
     qLower.includes("navigation")
   ) {
-    return `🧭 **YUKTARA Navigation Tabs Overview**
+    return `🧭 **sArathI Navigation Tabs Overview**
 
-YUKTARA features 5 primary tabs in the sidebar:
+sArathI features 5 primary tabs in the sidebar:
 1. **Dashboard** (\`dashboard\`): Welcome screen, study streak, high-level metrics, today's focus items, and quick action buttons.
 2. **Learning Plan** (\`plan\`): Complete day-by-day roadmap with subtopic checkboxes and exact allocated minutes.
-3. **YuktaraAI** (\`tutor\`): Personal AI tutor for explanations, code samples, quiz reviews, and course guidance.
+3. **sArathI AI** (\`tutor\`): Personal AI tutor for explanations, code samples, quiz reviews, and course guidance.
 4. **Quiz & Review** (\`quiz\`): Topic quizzes with 5 MCQs each, practice/timed modes, and detailed review keys.
 5. **Analytics** (\`progress\`): Comprehensive mastery analytics, weak topic highlights, and quiz attempt records.
 
@@ -1144,11 +1294,11 @@ YUKTARA features 5 primary tabs in the sidebar:
     qLower.includes("stuck at one place") ||
     qLower.includes("scrolling")
   ) {
-    return `📌 **Universal Tab Scroll Memory in YUKTARA**
+    return `📌 **Universal Tab Scroll Memory in sArathI**
 
-YUKTARA includes seamless scroll position preservation across **all tabs** (Dashboard, Learning Plan, YuktaraAI, Quiz & Review, Analytics):
-• When you scroll down on any tab (e.g. browsing Day 5 on Learning Plan or Question 4 in a Quiz) and switch to another tab, YUKTARA records your exact vertical scroll position.
-• When you navigate back to that tab, YUKTARA instantly restores your exact scroll location.
+sArathI includes seamless scroll position preservation across **all tabs** (Dashboard, Learning Plan, sArathI AI, Quiz & Review, Analytics):
+• When you scroll down on any tab (e.g. browsing Day 5 on Learning Plan or Question 4 in a Quiz) and switch to another tab, sArathI records your exact vertical scroll position.
+• When you navigate back to that tab, sArathI instantly restores your exact scroll location.
 • You will never lose your place or have the page snap back to top unexpectedly!`;
   }
 
@@ -1163,16 +1313,16 @@ YUKTARA includes seamless scroll position preservation across **all tabs** (Dash
       qLower.includes("mcq")
     )
   ) {
-    return `🎓 **How Quizzes Work in YUKTARA**
+    return `🎓 **How Quizzes Work in sArathI**
 
-Every quiz module in YUKTARA includes:
+Every quiz module in sArathI includes:
 • **5 Multiple Choice Questions (MCQs)**: Covering foundational concepts, syntax, and problem-solving.
 • **1 Short Answer Question**: Graded automatically by keyword matching against model criteria.
 • **Two Modes**:
   1. **Practice Mode**: Untimed, stress-free learning to reinforce concepts.
   2. **Timed Mode**: 180-second countdown timer for exam simulation.
 • **Draft Auto-Saving**: If you switch tabs or refresh, your active quiz draft is preserved.
-• **Review & Explanations**: Immediately after submitting, you get a full question review showing correct answers, option breakdowns, and a 1-click button to **"Ask YuktaraAI to Explain"**!`;
+• **Review & Explanations**: Immediately after submitting, you get a full question review showing correct answers, option breakdowns, and a 1-click button to **"Ask sArathI AI to Explain"**!`;
   }
 
   // 13. Questions about Quiz Performance / Scores / Weak Topics
@@ -1231,7 +1381,7 @@ You are currently studying **${subject.displayName}** at the **${profile.level}*
 **Modules & Topics Included:**
 ${topicsList}
 
-💡 *Available subjects in YUKTARA also include Python Programming, Web Development, and Data Structures & Algorithms (or any custom subject)!*`;
+💡 *Available subjects in sArathI also include Python Programming, Web Development, and Data Structures & Algorithms (or any custom subject)!*`;
   }
 
   // 15. Profile Edit / Reset / Data Storage Questions
@@ -1250,7 +1400,7 @@ ${topicsList}
 
 • **Editing Your Profile**: Click the **"Edit Profile"** button at the top of your **Dashboard** to modify your name, enrolled subject, level, daily study minutes, goal, or target date without losing your existing values.
 • **Resetting Data**: If you want a clean slate, click the **"Reset All Data"** button at the bottom of the sidebar.
-• **Privacy & Local Storage**: YUKTARA stores 100% of your data locally in your browser via \`localStorage\` (\`pla_pro_state_v2\`). No accounts, passwords, or cloud servers are required; your learning journey is completely private to this device!`;
+• **Privacy & Local Storage**: sArathI stores 100% of your data locally in your browser via \`localStorage\` (\`pla_pro_state_v2\`). No accounts, passwords, or cloud servers are required; your learning journey is completely private to this device!`;
   }
 
 
@@ -1379,7 +1529,7 @@ ${topic.explanations.beginner || exp}
 
     // General concept explanation for matched topic
     if (exp && (asksAboutTopic || qLower.length >= 3)) {
-      return `🤖 **YuktaraAI: ${topic.name} (${profile.level} Level)**
+      return `🤖 **sArathI AI: ${topic.name} (${profile.level} Level)**
 
 ${exp}
 
@@ -1398,42 +1548,564 @@ I couldn't find a specific answer for: *"${userText}"*
 • 📅 *"What should I study today?"* — Today's schedule
 • 📊 *"Show my course plan"* — Full day-by-day roadmap
 • 🎓 *"How do quizzes work?"* — Quiz modes & features
-• ℹ️ *"What is YUKTARA?"* — Full app guide
+• ℹ️ *"What is sArathI?"* — Full app guide
 • 💡 Ask about any **${profile.subject}** concept, topic, or paste a quiz question!
 
 💪 Keep going, ${firstName} — your goal *"${profile.goal}"* is waiting!`;
 }
 
-function sendTutorMessage(text) {
-  if (!text.trim()) return;
-  state.chat.push({ role: "user", text, ts: Date.now() });
+// Pre-load and cache Speech Synthesis voices
+let _cachedSpeechVoices = [];
+function preloadSpeechVoices() {
+  if (typeof window !== "undefined" && window.speechSynthesis) {
+    _cachedSpeechVoices = window.speechSynthesis.getVoices() || [];
+  }
+}
+if (typeof window !== "undefined" && window.speechSynthesis) {
+  preloadSpeechVoices();
+  window.speechSynthesis.onvoiceschanged = preloadSpeechVoices;
+}
 
-  const qLower = text.toLowerCase().trim();
+function transliterateMarathlishForSpeech(text) {
+  if (!text) return "";
+  let out = text;
+  const replacements = [
+    [/\bho\b/gi, "हो"],
+    [/\bmala\b/gi, "मला"],
+    [/\btula\b/gi, "तुला"],
+    [/\bmahit ahe\b/gi, "माहित आहे"],
+    [/\bmahit aahe\b/gi, "माहित आहे"],
+    [/\bmahiti ahe\b/gi, "माहिती आहे"],
+    [/\bnakki\b/gi, "नक्की"],
+    [/\bahe\b/gi, "आहे"],
+    [/\baahe\b/gi, "आहे"],
+    [/\bnahi\b/gi, "नाही"],
+    [/\bnaahi\b/gi, "नाही"],
+    [/\bkasa ahes\b/gi, "कसा आहेस"],
+    [/\bkay chalalay\b/gi, "काय चाललंय"],
+    [/\bkaay chalalay\b/gi, "काय चाललंय"],
+    [/\bsang\b/gi, "सांग"],
+    [/\bshikav\b/gi, "शिकव"],
+    [/\bnamaskar\b/gi, "नमस्कार"],
+    [/\bmitra\b/gi, "मित्रा"],
+    [/\bmadhe\b/gi, "मध्ये"],
+    [/\bmhanje\b/gi, "म्हणजे"],
+    [/\bsamajle\b/gi, "समजले"],
+    [/\bkase vaprayche\b/gi, "कसे वापरायचे"],
+    [/\babhyas\b/gi, "अभ्यास"],
+    [/\bvichar\b/gi, "विचार"]
+  ];
+  for (const [pat, rep] of replacements) {
+    out = out.replace(pat, rep);
+  }
+  return out;
+}
+
+function extractMainAnswerForSpeech(rawText) {
+  if (!rawText) return "";
+  let text = String(rawText);
+
+  // 1. Remove code blocks completely (never read programming code out loud)
+  text = text.replace(/```[\s\S]*?```/g, " ");
+
+  // 2. Remove markdown images, links, blockquotes, bold/italic markers
+  text = text.replace(/!\[.*?\]\(.*?\)/g, " ");
+  text = text.replace(/\[(.*?)\]\(.*?\)/g, "$1");
+  text = text.replace(/^>+\s*/gm, "");
+  text = text.replace(/[`*_~]/g, "");
+
+  // 3. Remove slide/page citations like [Slide 4 / Page 4]
+  text = text.replace(/\[(?:Slide|Page)[^\]]*\]/gi, " ");
+
+  // 4. Remove URLs
+  text = text.replace(/https?:\/\/\S+/gi, " ");
+
+  // 5. Remove trailing calls-to-action & suggestions
+  text = text.replace(/(?:Would you like|Do you want|Feel free to ask|तुम्हाला या विषयावर|तुम्हाला काही|सांगा[\s,]+मित्रा|काय मदत हवी आहे)[\s\S]*$/i, " ");
+
+  // 6. Split by lines
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+  // 7. Find informative explanation lines (skip headings starting with #)
+  const informative = [];
+  for (const line of lines) {
+    if (/^#+/.test(line)) continue;
+    const cleanLine = line.replace(/^[-*•\d.]+\s*/, "").trim();
+    if (cleanLine.length > 20) {
+      informative.push(cleanLine);
+    }
+  }
+
+  let coreAnswer = informative.join(". ");
+  if (!coreAnswer) {
+    coreAnswer = text.replace(/<[^>]*>/g, "").trim();
+  }
+
+  // 8. Extract only the primary 1-2 core sentences (120 - 280 characters)
+  const sentences = coreAnswer.split(/(?<=[.?!])\s+/);
+  const selected = [];
+  let charLen = 0;
+  for (const s of sentences) {
+    const trimmed = s.trim();
+    if (trimmed) {
+      selected.push(trimmed);
+      charLen += trimmed.length;
+      if (charLen >= 140 || selected.length >= 2) break;
+    }
+  }
+
+  return selected.join(" ").slice(0, 260).trim();
+}
+
+let _speechTimeout = null;
+
+function stopSpeech() {
+  if (typeof window !== "undefined" && window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+    if (_speechTimeout) {
+      clearTimeout(_speechTimeout);
+      _speechTimeout = null;
+    }
+  }
+}
+
+function speakText(text, langPreference) {
+  if (typeof window === "undefined" || !window.speechSynthesis) {
+    alert("Speech synthesis is not supported in this browser.");
+    return;
+  }
+  try {
+    // 1. If speaking, clicking again stops speech immediately
+    if (window.speechSynthesis.speaking) {
+      stopSpeech();
+      return;
+    }
+
+    // 2. Cancel and cleanly flush any previous audio streams
+    stopSpeech();
+
+    // 3. Extract ONLY the main core answer, stripping code and peripheral menus
+    const mainAnswerOnly = extractMainAnswerForSpeech(text);
+    let cleanText = (mainAnswerOnly || String(text || "").slice(0, 240))
+      .replace(/[`*#_>~]/g, "")
+      .replace(/<[^>]*>/g, "")
+      .replace(/\[Slide[^\]]*\]/gi, "")
+      .replace(/https?:\/\/\S+/gi, "")
+      .trim();
+
+    if (!cleanText) return;
+
+    // Check if Marathi voice should be used
+    const isExplicitMarathi = langPreference === "mr";
+    const hasDevanagari = /[\u0900-\u097F]/.test(cleanText);
+    const hasMarathlish = /\b(tula|mala|mahit|ahe|aahe|nahi|sang|kasa|kashi|kay|kaay|namaskar|mitra|shikav|karaycha|vaprayche|chalalay)\b/i.test(cleanText);
+    const speakInMarathi = isExplicitMarathi || hasDevanagari || hasMarathlish;
+
+    // If Marathi requested but content is English, translate to Marathi first!
+    let speechString = cleanText;
+    if (speakInMarathi && !hasDevanagari && !hasMarathlish) {
+      speechString = translateToMarathi(cleanText);
+    }
+
+    // Transliterate key Romanized Marathi words for authentic Indian accent
+    if (speakInMarathi) {
+      speechString = transliterateMarathlishForSpeech(speechString);
+    }
+
+    // Limit length to 300 chars for crisp, punchy main answer speech
+    speechString = speechString.slice(0, 300);
+
+    const utter = new SpeechSynthesisUtterance(speechString);
+    utter.rate = 0.95;
+    utter.pitch = 1.0;
+
+    const voices = (_cachedSpeechVoices && _cachedSpeechVoices.length ? _cachedSpeechVoices : window.speechSynthesis.getVoices()) || [];
+
+    if (speakInMarathi) {
+      // Find true Marathi voice first, then Hindi (which reads Devanagari Marathi natively), then Indian English
+      const marathiVoice = voices.find(v => v.lang === "mr-IN" || v.lang.toLowerCase().startsWith("mr") || v.name.toLowerCase().includes("marathi")) ||
+        voices.find(v => v.lang === "hi-IN" || v.lang.toLowerCase().startsWith("hi") || v.name.toLowerCase().includes("hindi")) ||
+        voices.find(v => v.lang === "en-IN" || v.name.toLowerCase().includes("india"));
+
+      if (marathiVoice) {
+        utter.voice = marathiVoice;
+        utter.lang = marathiVoice.lang || "mr-IN";
+      } else {
+        utter.lang = "mr-IN";
+      }
+    } else {
+      const engVoice = voices.find(v => v.lang.startsWith("en-IN")) ||
+        voices.find(v => v.lang.startsWith("en-US")) ||
+        voices.find(v => v.lang.startsWith("en"));
+      if (engVoice) utter.voice = engVoice;
+      utter.lang = engVoice ? engVoice.lang : "en-US";
+    }
+
+    // Delay speech execution by 80ms after cancel() to ensure browser audio buffer is clean and single-threaded
+    _speechTimeout = setTimeout(() => {
+      window.speechSynthesis.speak(utter);
+    }, 80);
+  } catch (e) {
+    console.warn("Speech synthesis error:", e);
+  }
+}
+
+async function handleDocumentUpload(file) {
+  if (!file) return;
+  const isPdf = file.name.toLowerCase().endsWith(".pdf");
+
+  try {
+    let parsedDoc = null;
+    if (isPdf && window.pdfjsLib) {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let textContent = "";
+      const totalPages = pdf.numPages;
+      const maxPages = Math.min(totalPages, 2000); // Support up to 2000 slides/pages
+
+      for (let i = 1; i <= maxPages; i++) {
+        try {
+          const page = await pdf.getPage(i);
+          const tc = await page.getTextContent();
+          const pageStr = tc.items.map(it => it.str).join(" ").trim();
+          if (pageStr) {
+            textContent += `--- Slide/Page ${i} ---\n${pageStr}\n\n`;
+          }
+        } catch (pageErr) {
+          console.warn(`[PDF] Error on page ${i}:`, pageErr);
+        }
+      }
+
+      parsedDoc = {
+        name: file.name,
+        size: (file.size / 1024).toFixed(1) + " KB",
+        type: "pdf",
+        pageCount: totalPages,
+        wordCount: textContent.trim().split(/\s+/).length,
+        text: textContent
+      };
+    } else {
+      const text = await file.text();
+      parsedDoc = {
+        name: file.name,
+        size: (file.size / 1024).toFixed(1) + " KB",
+        type: "text",
+        pageCount: null,
+        wordCount: text.trim().split(/\s+/).length,
+        text: text
+      };
+    }
+
+    if (!state.ai) state.ai = structuredClone(DEFAULT_AI);
+    state.ai.activeDocument = parsedDoc;
+    saveState();
+
+    // Auto tutor message acknowledging document
+    state.chat.push({
+      role: "tutor",
+      text: `### 📄 Document Loaded: "${parsedDoc.name}"\n\nI have successfully indexed **${parsedDoc.name}** (${parsedDoc.wordCount} words${parsedDoc.pageCount ? ', ' + parsedDoc.pageCount + ' slides/pages' : ''}).\n\n🎯 **Grounded Q&A Active:** You can ask any question from this file, request summaries, formulas, or practice quiz questions.`,
+      originalEn: `Document loaded: ${parsedDoc.name}`,
+      ts: Date.now()
+    });
+    saveState();
+    render();
+
+    scrollChatToBottom(true);
+  } catch (err) {
+    console.error("Document upload error:", err);
+    alert("Could not read document: " + err.message);
+  }
+}
+
+function checkAndSaveUserLearning(text) {
+  if (!text) return;
+  const match = text.match(/^(?:no[,\s]+|wrong[,\s]+|you made a mistake[,\s]+|actually[,\s]+|correction[:\s]+|remember that\s+|you are wrong[,\s]+|that is incorrect)(.*)/i);
+  if (match) {
+    const rule = text.trim();
+    if (!state.ai) state.ai = structuredClone(DEFAULT_AI);
+    if (!state.ai.learnings) state.ai.learnings = [];
+    state.ai.learnings.push({
+      id: "learn-" + Date.now(),
+      rule: rule,
+      timestamp: Date.now()
+    });
+    saveState();
+    console.log("[AI AGENT] Registered user correction:", rule);
+  }
+}
+
+async function sendTutorMessage(text) {
+  if (!text || !text.trim()) return;
+  const userText = text.trim();
+
+  // 1. Check & save user teaching / correction
+  checkAndSaveUserLearning(userText);
+
+  // 2. Add user message to state
+  const userMsg = { role: "user", text: userText, ts: Date.now() };
+  state.chat.push(userMsg);
+  const thinkingIndex = state.chat.length;
+  state.chat.push({ role: "tutor", text: "", isThinking: true, ts: Date.now() });
+  saveState();
+
+  // 3. In-place DOM update (AVOIDS full page re-render so screen stays anchored!)
+  const box = document.getElementById("chatScroll");
+  let userMsgEl = null;
+  let tutorMsgEl = null;
+  let tutorBubble = null;
+
+  if (box) {
+    const emptySub = box.querySelector(".page-sub");
+    if (emptySub) emptySub.remove();
+
+    userMsgEl = document.createElement("div");
+    userMsgEl.className = "chat-msg chat-user";
+    userMsgEl.innerHTML = `
+      <div class="chat-avatar"><i class="fa-solid fa-user"></i></div>
+      <div class="chat-bubble-container">
+        <div class="chat-bubble">${escapeHtml(userText)}</div>
+      </div>
+    `;
+    box.appendChild(userMsgEl);
+
+    // Anchor: Smoothly stay at the question point where the user asked it!
+    userMsgEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+    tutorMsgEl = document.createElement("div");
+    tutorMsgEl.className = "chat-msg chat-tutor";
+    tutorMsgEl.innerHTML = `
+      <div class="chat-avatar"><i class="fa-solid fa-graduation-cap"></i></div>
+      <div class="chat-bubble-container">
+        <div class="chat-bubble"><span class="thinking-dots"><span></span><span></span><span></span></span></div>
+      </div>
+    `;
+    box.appendChild(tutorMsgEl);
+    tutorBubble = tutorMsgEl.querySelector(".chat-bubble");
+  }
+
+  const qLower = userText.toLowerCase();
   const asksMarathi = qLower.includes("marathi") || qLower.includes("मराठी") || qLower.includes("translate in marathi") || qLower.includes("in marathi");
 
-  let reply = tutorRespond(text, state.ui.tutorTopicId, state.profile ? state.profile.level : "Beginner");
-  let marathiReply = translateToMarathi(reply);
+  let fullReply = "";
+  let usedProvider = "sArathI Instant AI";
 
-  // If user specifically asked for marathi, display marathi by default
-  const activeLang = asksMarathi ? "mr" : "en";
+  try {
+    const doc = state.ai && state.ai.activeDocument ? {
+      name: state.ai.activeDocument.name,
+      content: state.ai.activeDocument.text,
+      type: state.ai.activeDocument.type
+    } : null;
 
-  state.chat.push({
+    const res = await fetch("/api/ai/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: state.chat.filter(m => !m.isThinking).slice(-6).map(m => ({
+          role: m.role,
+          content: m.text
+        })),
+        documentContext: doc,
+        studentProfile: state.profile || {},
+        provider: (state.ai && state.ai.provider) || "instant-free",
+        apiKey: (state.ai && state.ai.apiKey) || null,
+        learnings: (state.ai && state.ai.learnings) || []
+      })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.reply) {
+        fullReply = data.reply;
+        usedProvider = data.provider || "sArathI AI";
+      }
+    }
+  } catch (err) {
+    console.warn("[AI] Fetch call warning, falling back to local cognitive engine:", err);
+  }
+
+  // Fallback if needed
+  if (!fullReply || !fullReply.trim()) {
+    fullReply = tutorRespond(userText, state.ui.tutorTopicId, state.profile ? state.profile.level : "Beginner");
+  }
+
+  const alreadyMarathi = /[\u0900-\u097F]/.test(fullReply);
+  let marathiReply = alreadyMarathi ? fullReply : translateToMarathi(fullReply);
+  const activeLang = (asksMarathi || alreadyMarathi) ? "mr" : "en";
+  const displayText = alreadyMarathi ? fullReply : (activeLang === "mr" ? marathiReply : fullReply);
+
+  // Update chat item in state
+  state.chat[thinkingIndex] = {
     role: "tutor",
-    text: activeLang === "mr" ? marathiReply : reply,
-    originalEn: reply,
+    text: displayText,
+    originalEn: fullReply,
     translatedMr: marathiReply,
     currentLang: activeLang,
-    ts: Date.now()
-  });
-
+    provider: usedProvider,
+    ts: Date.now(),
+    isThinking: false
+  };
   saveState();
-  render();
 
-  const raf = window.requestAnimationFrame || (fn => setTimeout(fn, 0));
-  raf(() => {
-    const box = document.getElementById("chatScroll");
-    if (box) box.scrollTop = box.scrollHeight;
+  // If DOM element exists, stream in-place!
+  if (tutorBubble) {
+    const words = displayText.split(" ");
+    let currentWords = [];
+    const wordsPerStep = Math.max(1, Math.floor(words.length / 28));
+    let wIdx = 0;
+
+    function streamStep() {
+      if (wIdx < words.length) {
+        const chunk = words.slice(wIdx, wIdx + wordsPerStep).join(" ");
+        currentWords.push(chunk);
+        wIdx += wordsPerStep;
+        tutorBubble.innerHTML = formatMarkdown(currentWords.join(" ")) + '<span class="streaming-cursor"></span>';
+        setTimeout(streamStep, 18);
+      } else {
+        tutorBubble.innerHTML = formatMarkdown(displayText);
+        attachTutorBubbleActions(tutorMsgEl, thinkingIndex, displayText, usedProvider);
+        if (state.ai && state.ai.autoSpeak) {
+          speakText(displayText);
+        }
+      }
+    }
+
+    streamStep();
+  } else {
+    render();
+  }
+}
+
+function attachTutorBubbleActions(containerEl, msgIdx, text, provider) {
+  if (!containerEl) return;
+  const bubbleContainer = containerEl.querySelector(".chat-bubble-container");
+  if (!bubbleContainer) return;
+
+  const actionsWrap = document.createElement("div");
+  actionsWrap.className = "chat-actions chat-msg-actions-row";
+  actionsWrap.style.marginTop = "8px";
+  actionsWrap.innerHTML = `
+    <span class="ai-provider-badge"><i class="fa-solid fa-brain"></i> ${escapeHtml(provider || "sArathI AI")}</span>
+    <button class="chat-action-pill-btn" data-copy-msg="${msgIdx}" title="Copy response to clipboard">
+      <i class="fa-regular fa-copy"></i> Copy
+    </button>
+    <button class="chat-action-pill-btn" data-speak-msg="${msgIdx}" title="Read Aloud in English">
+      <i class="fa-solid fa-volume-high"></i> Listen
+    </button>
+    <button class="chat-action-pill-btn btn-marathi" data-speak-mr-msg="${msgIdx}" title="मराठीत ऐका (Listen in Marathi)">
+      <i class="fa-solid fa-volume-high"></i> मराठीत ऐका
+    </button>
+    <button class="chat-action-pill-btn btn-teach" data-teach-ai="${msgIdx}" title="Teach sArathI / Correct this answer">
+      <i class="fa-solid fa-lightbulb"></i> Teach
+    </button>
+  `;
+  bubbleContainer.appendChild(actionsWrap);
+}
+
+function openTeachModal(msgIdx) {
+  const currentMsg = (state.chat && state.chat[msgIdx]) ? state.chat[msgIdx] : null;
+  const snippet = currentMsg ? currentMsg.text.replace(/[`*#_]/g, "").slice(0, 160) + "..." : "Current response";
+
+  let modalWrap = document.getElementById("aiSettingsModalWrap");
+  if (!modalWrap) {
+    modalWrap = document.createElement("div");
+    modalWrap.id = "aiSettingsModalWrap";
+    document.body.appendChild(modalWrap);
+  }
+
+  modalWrap.innerHTML = `
+    <div class="sarathi-modal-backdrop" id="teachModalBackdrop">
+      <div class="sarathi-modal" style="max-width:540px;">
+        <div class="sarathi-modal-header">
+          <h3><i class="fa-solid fa-lightbulb" style="color:#10b981;"></i> Teach sArathI AI / Correct Answer</h3>
+          <button type="button" class="sarathi-modal-close" id="closeTeachModalBtn">&times;</button>
+        </div>
+
+        <p style="font-size:0.88rem; color:var(--text-muted); margin-bottom:12px; line-height:1.5;">
+          Teach sArathI a rule, fact, or correction. Your AI mentor permanently saves this to persistent memory so it never makes this mistake again!
+        </p>
+
+        <div style="background:rgba(255,255,255,0.04); border:1px solid var(--border-color); border-radius:10px; padding:10px 14px; margin-bottom:14px; font-size:0.82rem; color:var(--text-muted);">
+          <strong style="color:var(--text-main);"><i class="fa-solid fa-quote-left"></i> Answer Context:</strong> ${escapeHtml(snippet)}
+        </div>
+
+        <div class="field">
+          <label for="teachRuleInput" style="font-weight:600; font-size:0.86rem; color:var(--text-main);">Rule or Correction to Remember:</label>
+          <textarea id="teachRuleInput" rows="3" style="width:100%; border-radius:10px; padding:10px; background:rgba(0,0,0,0.25); border:1px solid var(--border-color); color:var(--text-main); font-family:inherit; font-size:0.9rem;" placeholder="e.g. 'Dijkstra does not work with negative edge weights; use Bellman-Ford instead.' or 'Always provide Python code with comments.'"></textarea>
+        </div>
+
+        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; margin-bottom:14px;">
+          <button type="button" class="suggestion-chip" data-quick-rule="Always provide step-by-step mathematical reasoning.">+ Step-by-step reasoning</button>
+          <button type="button" class="suggestion-chip" data-quick-rule="Keep answers concise and focus on key exam points.">+ Concise for exams</button>
+          <button type="button" class="suggestion-chip" data-quick-rule="Provide working Python implementation for coding questions.">+ Python code focus</button>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="btn-secondary" id="cancelTeachModalBtn">Cancel</button>
+          <button type="button" class="btn-primary" id="saveTeachRuleBtn" style="background:linear-gradient(135deg, #10b981, #059669); border:none;">
+            <i class="fa-solid fa-brain"></i> Save & Train sArathI
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const closeTeachModal = () => { modalWrap.innerHTML = ""; };
+  const closeBtn = document.getElementById("closeTeachModalBtn");
+  if (closeBtn) closeBtn.addEventListener("click", closeTeachModal);
+  const cancelBtn = document.getElementById("cancelTeachModalBtn");
+  if (cancelBtn) cancelBtn.addEventListener("click", closeTeachModal);
+  const backdrop = document.getElementById("teachModalBackdrop");
+  if (backdrop) backdrop.addEventListener("click", (e) => { if (e.target === backdrop) closeTeachModal(); });
+
+  const inputArea = document.getElementById("teachRuleInput");
+  modalWrap.querySelectorAll("[data-quick-rule]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      inputArea.value = btn.getAttribute("data-quick-rule");
+      inputArea.focus();
+    });
   });
+
+  const saveBtn = document.getElementById("saveTeachRuleBtn");
+  if (saveBtn) {
+    saveBtn.addEventListener("click", () => {
+      const ruleText = inputArea.value.trim();
+      if (!ruleText) {
+        alert("Please enter a rule or correction before saving.");
+        return;
+      }
+      if (!state.ai) state.ai = structuredClone(DEFAULT_AI);
+      if (!state.ai.learnings) state.ai.learnings = [];
+      state.ai.learnings.push({
+        id: "learn-" + Date.now(),
+        rule: ruleText,
+        timestamp: Date.now()
+      });
+      saveState();
+      closeTeachModal();
+      showLearnedToast(ruleText);
+    });
+  }
+
+  setTimeout(() => { if (inputArea) inputArea.focus(); }, 80);
+}
+
+function showLearnedToast(rule) {
+  const toast = document.createElement("div");
+  toast.className = "sarathi-copy-toast";
+  toast.style.borderColor = "rgba(16, 185, 129, 0.5)";
+  toast.innerHTML = `
+    <span><i class="fa-solid fa-brain" style="color:#10b981;"></i> Learned & Saved!</span>
+    <span style="max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">"${escapeHtml(rule)}"</span>
+    <button class="sarathi-copy-toast-close" onclick="this.parentElement.remove()">&times;</button>
+  `;
+  document.body.appendChild(toast);
+  setTimeout(() => {
+    if (toast.parentNode) {
+      toast.style.opacity = "0";
+      toast.style.transform = "translateY(15px)";
+      setTimeout(() => toast.remove(), 300);
+    }
+  }, 4000);
 }
 
 /* --------------------------------------------------------------------------
@@ -1656,8 +2328,8 @@ function renderAuthPage() {
           <div class="auth-brand-icon">
             <i class="fa-solid fa-graduation-cap"></i>
           </div>
-          <h1 class="auth-brand-title">YUKTARA</h1>
-          <p class="auth-brand-subtitle">Personalized Learning Assistant & Adaptive Tutor</p>
+          <h1 class="auth-brand-title">sArathI</h1>
+          <p class="auth-brand-subtitle">AI-Powered Personalized Learning & Adaptive LLM Tutor</p>
         </div>
 
         <div class="auth-tabs">
@@ -1683,7 +2355,7 @@ function renderAuthPage() {
             <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; border-top:1px dashed var(--border-color); padding-top:8px;">
               <div class="demo-credentials-info">
                 <span class="demo-credentials-title" style="color:#ef4444;"><i class="fa-solid fa-shield-halved"></i> Admin Demo:</span>
-                <span class="demo-credentials-text">admin@yuktara.edu &bull; admin123</span>
+                <span class="demo-credentials-text">admin@sarathi.edu &bull; admin123</span>
               </div>
               <button type="button" class="demo-fill-btn" id="demoAdminBtn" style="border-color:rgba(239,68,68,0.4); color:#ef4444;">
                 <i class="fa-solid fa-key"></i> Use Admin
@@ -1703,7 +2375,7 @@ function renderAuthPage() {
           <form id="loginForm">
             <div class="field">
               <label for="auth-email">Email Address</label>
-              <input id="auth-email" type="email" placeholder="e.g. abc@gmail.com" required autocomplete="username" />
+              <input id="auth-email" type="email" placeholder="e.g. tejasostwal@gmail.com" required autocomplete="username" />
             </div>
 
             <div class="field">
@@ -1712,7 +2384,7 @@ function renderAuthPage() {
             </div>
 
             <button type="submit" class="btn-primary" style="width:100%; margin-top:8px; padding:12px;">
-              <i class="fa-solid fa-right-to-bracket"></i> Sign In to YUKTARA
+              <i class="fa-solid fa-right-to-bracket"></i> Sign In to sArathI
             </button>
 
             <div class="auth-switch-prompt">
@@ -1797,6 +2469,7 @@ function attachAuthHandlers() {
     });
   }
 
+
   const demoStudentBtn = document.getElementById("demoStudentBtn");
   if (demoStudentBtn) {
     demoStudentBtn.addEventListener("click", () => {
@@ -1821,7 +2494,7 @@ function attachAuthHandlers() {
       const emailInput = document.getElementById("auth-email");
       const passInput = document.getElementById("auth-password");
       if (emailInput && passInput) {
-        emailInput.value = "admin@yuktara.edu";
+        emailInput.value = "admin@sarathi.edu";
         passInput.value = "admin123";
         const form = document.getElementById("loginForm");
         if (form && typeof form.requestSubmit === "function") {
@@ -1860,7 +2533,7 @@ function attachAuthHandlers() {
 
         if (res.status === 404) {
           // Running on a static host (e.g. Netlify) without a Node backend — show clear message
-          state.auth.error = "The YUKTARA backend server is not running. Please start the Node.js server (npm start) to use this application.";
+          state.auth.error = "The sArathI backend server is not running. Please start the Node.js server (npm start) to use this application.";
           render();
           return;
         }
@@ -1895,7 +2568,7 @@ function attachAuthHandlers() {
       } catch (err) {
         // Network error — backend is not reachable
         console.error("[AUTH] Login failed — backend unreachable:", err);
-        state.auth.error = "Cannot connect to the YUKTARA backend server. Please ensure the Node.js server is running (npm start) and try again.";
+        state.auth.error = "Cannot connect to the sArathI backend server. Please ensure the Node.js server is running (npm start) and try again.";
         render();
       }
     });
@@ -1963,7 +2636,7 @@ function attachAuthHandlers() {
 
         if (res.status === 404) {
           // No Node.js backend running — cannot create accounts
-          state.auth.error = "The YUKTARA backend server is not running. Please start the Node.js server (npm start) or deploy to Netlify. Accounts are stored in PostgreSQL.";
+          state.auth.error = "The sArathI backend server is not running. Please start the Node.js server (npm start) or deploy to Netlify. Accounts are stored in PostgreSQL.";
           render();
           return;
         }
@@ -2010,7 +2683,7 @@ function attachAuthHandlers() {
       } catch (err) {
         // Network error — backend is not reachable
         console.error("[AUTH] Registration failed — backend unreachable:", err);
-        state.auth.error = "Cannot connect to the YUKTARA backend server. Please ensure the Node.js server is running (npm start) or the site is deployed to Netlify. Accounts are stored in PostgreSQL.";
+        state.auth.error = "Cannot connect to the sArathI backend server. Please ensure the Node.js server is running (npm start) or the site is deployed to Netlify. Accounts are stored in PostgreSQL.";
         render();
       }
     });
@@ -2070,7 +2743,7 @@ function renderSidebar(activePage) {
     <aside class="sidebar">
       <div class="brand">
         <div class="brand-icon"><i class="fa-solid fa-graduation-cap"></i></div>
-        <div class="brand-name">YUKTARA</div>
+        <div class="brand-name">sArathI</div>
       </div>
 
       <div class="sidebar-student">
@@ -2109,7 +2782,7 @@ function renderNoProfileNotice() {
   return `
     <div class="card" style="text-align:center; padding: 60px 40px;">
       <h2>Setup Your Profile First</h2>
-      <p class="page-sub" style="margin-bottom: 24px;">Please complete your student profile on the dashboard to unlock YUKTARA learning plan and quiz system.</p>
+      <p class="page-sub" style="margin-bottom: 24px;">Please complete your student profile on the dashboard to unlock sArathI learning plan and quiz system.</p>
       <button class="btn-primary" data-nav="dashboard">Go to Dashboard</button>
     </div>`;
 }
@@ -2175,7 +2848,7 @@ function renderProfileForm(errorMsg = null) {
 
         <div style="display:flex; gap:12px; margin-top:10px;">
           <button type="submit" class="btn-primary" style="flex:1;">
-            <i class="fa-solid fa-rocket"></i> ${cur.subject ? "Update YUKTARA Learning Plan" : "Create My YUKTARA Learning Plan"}
+            <i class="fa-solid fa-rocket"></i> ${cur.subject ? "Update sArathI Learning Plan" : "Create My sArathI Learning Plan"}
           </button>
           ${cur.subject ? `<button type="button" class="btn-secondary" id="cancelEditProfileBtn">Cancel</button>` : ""}
         </div>
@@ -2328,7 +3001,7 @@ function renderDashboard() {
               `).join("")}
             </ul>
             <button class="btn-primary" data-nav="tutor" style="width:100%; margin-top:12px;">
-              <i class="fa-solid fa-robot"></i> Revise Weak Topics with YuktaraAI
+              <i class="fa-solid fa-robot"></i> Revise Weak Topics with sArathI AI
             </button>
           ` : `<p class="page-sub">No weak topics! Excellent work maintaining high quiz mastery.</p>`}
         </div>
@@ -2562,69 +3235,179 @@ function renderPlan() {
     </section>`;
 }
 
+function getModelDisplayName() {
+  const p = (state.ai && state.ai.provider) || 'instant-free';
+  if (p === 'gemini') return '✨ Gemini 2.0 Flash';
+  if (p === 'groq') return '⚡ Groq Llama 3.3 70B';
+  if (p === 'deepseek') return '🧠 DeepSeek R1';
+  return '⚡ sArathI Instant Free AI';
+}
+
+function startNewChat() {
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  state.chat = [];
+  state.ui.tutorTopicId = null;
+  saveState();
+  render();
+  setTimeout(() => {
+    const input = document.getElementById("chatInput");
+    if (input) {
+      input.value = "";
+      input.focus();
+    }
+  }, 50);
+}
+
 function renderTutor() {
   const subject = getSubjectData(state.profile ? state.profile.subject : "");
-  const selectedId = state.ui.tutorTopicId || "";
+  const activeDoc = state.ai && state.ai.activeDocument;
+  const isAutoSpeak = Boolean(state.ai && state.ai.autoSpeak);
 
   return `
-    <section class="page">
-      <header class="page-header">
-        <h1>YuktaraAI</h1>
-        <p class="page-sub">Your personal AI tutor — level-adjusted explanations (${state.profile.level} level)</p>
+    <section class="page" id="tutorPage">
+      <header class="page-header" style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px;">
+        <div>
+          <h1><i class="fa-solid fa-wand-magic-sparkles" style="color:var(--accent);"></i> sArathI AI Live Tutor</h1>
+          <p class="page-sub">Next-Gen Cognitive Learning Mentor &middot; Live LLM Reasoning, Document Q&A & Adaptive Explanations</p>
+        </div>
       </header>
+
+      <!-- AI Chat Controls Top Bar -->
+      <div class="chat-controls-top">
+        <div class="chat-controls-left">
+          <button class="model-selector-btn" id="openAiSettingsBtn" title="Switch AI model or configure free API keys">
+            <i class="fa-solid fa-circle"></i>
+            <span>${getModelDisplayName()}</span>
+            <i class="fa-solid fa-chevron-down" style="font-size:0.65rem; margin-left:2px;"></i>
+          </button>
+
+          <label for="docUploadInput" class="chat-header-action-btn" title="Upload PDF, text, or study notes for document Q&A">
+            <i class="fa-solid fa-file-arrow-up" style="color:var(--accent);"></i>
+            <span>${activeDoc ? 'Replace Document' : 'Upload Document (PDF/Text)'}</span>
+          </label>
+          <input type="file" id="docUploadInput" accept=".pdf,.txt,.md,.json,.csv,.docx" style="display:none;" />
+        </div>
+
+        <div class="chat-controls-right">
+          <button id="voiceToggleBtn" class="chat-header-action-btn ${isAutoSpeak ? 'active' : ''}" title="Toggle automatic speech readout">
+            <i class="fa-solid ${isAutoSpeak ? 'fa-volume-high' : 'fa-volume-xmark'}" style="color:${isAutoSpeak ? 'var(--accent)' : 'inherit'};"></i>
+            <span>${isAutoSpeak ? 'Read Aloud: ON' : 'Read Aloud: OFF'}</span>
+          </button>
+
+          <button id="newChatBtn" data-action="new-chat" class="chat-header-action-btn" title="Start a fresh chat conversation">
+            <i class="fa-solid fa-rotate-left"></i>
+            <span>New Chat</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Active Document Banner (When a file is uploaded) -->
+      ${activeDoc ? `
+        <div class="doc-attached-banner" id="activeDocBanner">
+          <div class="doc-info">
+            <i class="fa-solid ${activeDoc.type === 'pdf' ? 'fa-file-pdf' : 'fa-file-lines'}"></i>
+            <span class="doc-name" title="${escapeHtml(activeDoc.name)}">${escapeHtml(activeDoc.name)}</span>
+            <span class="doc-meta">${activeDoc.wordCount || 0} words ${activeDoc.pageCount ? '&middot; ' + activeDoc.pageCount + ' pages' : '&middot; ' + activeDoc.size}</span>
+            <span class="pill pill-high" style="font-size:0.68rem; margin-left:6px;">
+              <i class="fa-solid fa-circle-check"></i> Document Q&A Active
+            </span>
+          </div>
+          <button id="clearDocBtn" class="doc-clear-btn" title="Remove document">
+            <i class="fa-solid fa-xmark"></i> Remove
+          </button>
+        </div>
+      ` : ""}
 
       <div class="card tutor-card">
         <div class="chat-scroll" id="chatScroll">
           ${state.chat.length ? state.chat.map((m, msgIdx) => `
             <div class="chat-msg chat-${m.role}">
-              <div class="chat-avatar"><i class="fa-solid ${m.role === "user" ? "fa-user" : "fa-robot"}"></i></div>
+              <div class="chat-avatar">
+                <i class="fa-solid ${m.role === "user" ? "fa-user" : "fa-wand-magic-sparkles"}"></i>
+              </div>
               <div class="chat-bubble-container">
-                <div class="chat-bubble">${formatMarkdown(m.text)}</div>
-                ${m.role === "tutor" ? `
-                  <div class="chat-actions">
-                    <div class="msg-menu-wrap">
-                      <button class="msg-more-btn" data-toggle-msg-menu="${msgIdx}" title="Translate options">
-                        <i class="fa-solid fa-ellipsis-vertical"></i>
-                      </button>
-                      <div class="msg-dropdown" id="msgMenu-${msgIdx}">
-                        <div class="msg-dropdown-header"><i class="fa-solid fa-language"></i> Translate / भाषांतर</div>
-                        <button class="msg-dropdown-item ${m.currentLang === "en" || !m.currentLang ? "active" : ""}" data-translate-msg="${msgIdx}" data-lang="en">
-                          English
-                        </button>
-                        <button class="msg-dropdown-item ${m.currentLang === "mr" ? "active" : ""}" data-translate-msg="${msgIdx}" data-lang="mr">
-                          मराठी (Marathi)
-                        </button>
-                      </div>
+                <div class="chat-bubble">
+                  ${m.isThinking ? `
+                    <div style="display:flex; align-items:center; gap:8px; color:var(--text-muted); font-size:0.92rem;">
+                      <i class="fa-solid fa-spinner fa-spin" style="color:var(--accent);"></i>
+                      <span>sArathI AI is analyzing and composing answer...</span>
                     </div>
+                  ` : formatMarkdown(m.text)}
+                </div>
+
+                ${m.role === "tutor" && !m.isThinking ? `
+                  <div class="chat-actions chat-msg-actions-row">
+                    <span class="ai-provider-badge"><i class="fa-solid fa-brain"></i> ${escapeHtml(m.provider || "sArathI AI")}</span>
+                    <button class="chat-action-pill-btn" data-copy-msg="${msgIdx}" title="Copy response to clipboard">
+                      <i class="fa-regular fa-copy"></i> Copy
+                    </button>
+                    <button class="chat-action-pill-btn" data-speak-msg="${msgIdx}" title="Read aloud in English">
+                      <i class="fa-solid fa-volume-high"></i> Listen
+                    </button>
+                    <button class="chat-action-pill-btn btn-marathi" data-speak-mr-msg="${msgIdx}" title="मराठीत ऐका (Listen in Marathi)">
+                      <i class="fa-solid fa-volume-high"></i> मराठीत ऐका
+                    </button>
+                    <button class="chat-action-pill-btn btn-teach" data-teach-ai="${msgIdx}" title="Teach sArathI / Correct this answer">
+                      <i class="fa-solid fa-lightbulb"></i> Teach
+                    </button>
                   </div>
                 ` : ""}
               </div>
             </div>
           `).join("") : `
-            <div class="page-sub" style="text-align:center; padding: 32px 16px;">
-              <div style="font-size:2rem; margin-bottom:8px;">🤖</div>
-              <h3 style="color:var(--text-main); margin-bottom:6px; font-size:1.15rem;">Hello ${escapeHtml(state.profile ? state.profile.name.split(" ")[0] : "Student")}! I am YuktaraAI.</h3>
-              <p style="font-size:0.92rem; max-width:560px; margin:0 auto 12px; line-height:1.5;">I have full active memory of your profile, dates, course plan, today's schedule, and all features of YUKTARA. Ask me anything or tap the quick chips below!</p>
+            <div class="page-sub" style="text-align:center; padding: 40px 20px;">
+              <div style="font-size:2.4rem; margin-bottom:10px;">✨</div>
+              <h3 style="color:var(--text-main); margin-bottom:6px; font-size:1.25rem;">Hello ${escapeHtml(state.profile ? state.profile.name.split(" ")[0] : "Student")}! I am sArathI AI.</h3>
+              <p style="font-size:0.95rem; max-width:580px; margin:0 auto 16px; line-height:1.55; color:var(--text-muted);">
+                Your live 24/7 AI cognitive mentor. Ask questions about your syllabus concepts, debug code, review quiz mistakes, or <strong>upload any document/PDF</strong> above to ask questions directly from it!
+              </p>
+              <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap;">
+                <span class="pill pill-high" style="font-size:0.75rem;"><i class="fa-solid fa-brain"></i> Frontier AI Intelligence</span>
+                <span class="pill pill-mid" style="font-size:0.75rem;"><i class="fa-solid fa-file-pdf"></i> Document & Slides Q&A</span>
+                <span class="pill pill-mid" style="font-size:0.75rem;"><i class="fa-solid fa-globe"></i> Live Web Knowledge</span>
+                <span class="pill pill-mid" style="font-size:0.75rem;"><i class="fa-solid fa-microphone"></i> Voice Enabled</span>
+              </div>
             </div>
           `}
         </div>
 
+        <!-- Dynamic Context-Aware Suggestion Chips -->
         <div class="chat-suggestions">
-          <button class="suggestion-chip" data-send-text="What should I study today?">📅 Today's Plan</button>
-          <button class="suggestion-chip" data-send-text="Show my course plan and how many days are scheduled">📊 Course Days & Plan</button>
-          <button class="suggestion-chip" data-send-text="What is my profile and goal?">👤 My Profile & Goal</button>
-          <button class="suggestion-chip" data-send-text="मराठीमध्ये सांगा (Explain in Marathi)">🇮🇳 मराठीमध्ये सांगा</button>
-          <button class="suggestion-chip" data-send-text="What is YUKTARA and what features does this app have?">ℹ️ About YUKTARA App</button>
-          <button class="suggestion-chip" data-send-text="Explain this simply with a real-world analogy">💡 Explain simply</button>
-          <button class="suggestion-chip" data-send-text="Give me a practical code example for this topic">💻 Code example</button>
-          <button class="suggestion-chip" data-send-text="What are common pitfalls and mistakes here?">⚠️ Common pitfalls</button>
+          ${activeDoc ? `
+            <button class="suggestion-chip" data-send-text="Summarize this uploaded document in clear bullet points with main takeaways.">📋 Summarize Document</button>
+            <button class="suggestion-chip" data-send-text="What are the most important key concepts and takeaways in this document?">🎯 Key Takeaways</button>
+            <button class="suggestion-chip" data-send-text="Generate 5 practice multiple-choice questions with answer explanations based on this document.">❓ 5 Quiz Questions from Doc</button>
+            <button class="suggestion-chip" data-send-text="Explain the most complex or difficult topic in this document simply with an analogy.">💡 Explain Complex Topics</button>
+            <button class="suggestion-chip" data-send-text="या डॉक्युमेंटचा मराठीमध्ये सारांश सांगा (Summarize this doc in Marathi)">🇮🇳 मराठीमध्ये सारांश</button>
+          ` : `
+            <button class="suggestion-chip" data-send-text="What should I study today based on my learning plan?">📅 Today's Plan</button>
+            <button class="suggestion-chip" data-send-text="Show my course schedule and how many days are planned.">📊 Course Days & Plan</button>
+            <button class="suggestion-chip" data-send-text="Explain this concept simply with a memorable real-world analogy.">💡 Explain simply</button>
+            <button class="suggestion-chip" data-send-text="Give me a production-ready, fully commented code example for this topic.">💻 Code example</button>
+            <button class="suggestion-chip" data-send-text="What are common pitfalls, edge cases, and exam mistakes in this area?">⚠️ Common pitfalls</button>
+            <button class="suggestion-chip" data-send-text="मराठीमध्ये सांगा (Explain this topic in authentic Marathi)">🇮🇳 मराठीमध्ये सांगा</button>
+          `}
         </div>
 
+        <!-- ChatGPT / Gemini Style Input Form -->
         <form id="chatForm" class="chat-form">
-          <input id="chatInput" type="text" class="chat-input" placeholder="Ask about your schedule, profile, course concepts, quiz MCQs, or app features..." autocomplete="off" />
-          <button type="submit" class="btn-primary"><i class="fa-solid fa-paper-plane"></i> Send</button>
+          <div class="chat-input-row">
+            <label for="docUploadInput" class="chat-attach-btn" title="Upload Document, Slides, or Notes (PDF, TXT, DOCS)">
+              <i class="fa-solid fa-paperclip"></i>
+            </label>
+            <textarea id="chatInput" class="chat-textarea" rows="1" placeholder="Ask sArathI AI anything..." autocomplete="off"></textarea>
+            <button type="button" id="voiceMicBtn" class="chat-voice-btn" title="Voice Input (Speech-to-Text)">
+              <i class="fa-solid fa-microphone"></i>
+            </button>
+            <button type="submit" id="chatSendBtn" class="chat-send-btn" title="Send message">
+              <i class="fa-solid fa-arrow-up"></i>
+            </button>
+          </div>
         </form>
       </div>
+
+      <!-- AI Settings Modal Container (Rendered conditionally) -->
+      <div id="aiSettingsModalWrap"></div>
     </section>`;
 }
 
@@ -2710,7 +3493,7 @@ function renderActiveQuizScreen() {
           <span class="page-sub">Mode: ${q.mode.toUpperCase()} &middot; ${q.mcq.length} Questions &middot; ~${Math.ceil(q.mcq.length * 90 / 60)} min</span>
         </div>
         <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-          <span class="quiz-anti-cheat-notice"><i class="fa-solid fa-shield-halved"></i> YuktaraAI disabled during test</span>
+          <span class="quiz-anti-cheat-notice"><i class="fa-solid fa-shield-halved"></i> sArathI AI disabled during test</span>
           ${q.mode === "timed" ? `
             <div class="quiz-timer">
               <i class="fa-solid fa-clock"></i> <span id="quizTimerDisplay">${Math.floor(q.timeLeft / 60)}:${q.timeLeft % 60 < 10 ? "0" : ""}${q.timeLeft % 60}</span>
@@ -2770,7 +3553,7 @@ function renderQuizReviewScreen(attempt) {
         <div style="display:flex; align-items:center; justify-content:space-between;">
           <div>
             <h3>Performance Evaluation</h3>
-            <p class="page-sub">${attempt.percent >= 75 ? "Excellent mastery! You demonstrate strong comprehension." : attempt.percent >= 50 ? "Good effort. Review missed questions below to reinforce key ideas." : "Needs review. We recommend revising this topic with YuktaraAI."}</p>
+            <p class="page-sub">${attempt.percent >= 75 ? "Excellent mastery! You demonstrate strong comprehension." : attempt.percent >= 50 ? "Good effort. Review missed questions below to reinforce key ideas." : "Needs review. We recommend revising this topic with sArathI AI."}</p>
           </div>
           <span class="pill ${pillClass(attempt.percent)}" style="font-size:1.1rem; padding:8px 16px;">${attempt.percent}% Score</span>
         </div>
@@ -2806,7 +3589,7 @@ function renderQuizReviewScreen(attempt) {
                 <div class="explanation-title"><i class="fa-solid fa-circle-info"></i> Explanation</div>
                 <p>${escapeHtml(rev.explanation)}</p>
                 <button class="btn-secondary" data-ask-tutor-mcq="${encodeURIComponent(rev.q)}" style="margin-top:10px; padding:6px 14px; font-size:0.85rem;">
-                  <i class="fa-solid fa-robot"></i> Ask YuktaraAI to Explain Why This Choice is Correct
+                  <i class="fa-solid fa-robot"></i> Ask sArathI AI to Explain Why This Choice is Correct
                 </button>
               </div>
             </div>`;
@@ -2834,7 +3617,7 @@ function renderQuizReviewScreen(attempt) {
 
       <div style="text-align:center; margin-top:30px;">
         <button class="btn-primary" id="tutorReviseBtn" data-topic="${attempt.topicId}">
-          <i class="fa-solid fa-robot"></i> Revise Missed Concepts with YuktaraAI
+          <i class="fa-solid fa-robot"></i> Revise Missed Concepts with sArathI AI
         </button>
       </div>
     </section>`;
@@ -2953,23 +3736,158 @@ function formatDate(dateStr) {
 }
 
 function formatMarkdown(text) {
+  if (!text) return "";
   const codeBlocks = [];
-  let safeText = String(text || "").replace(/```([\s\S]*?)```/g, (match, code) => {
-    codeBlocks.push(code);
+
+  // Match ```lang\ncode``` or ```code```
+  let raw = String(text).replace(/```([a-zA-Z0-9_\-\.\+]*)\n?([\s\S]*?)```/g, (match, lang, code) => {
+    codeBlocks.push({ lang: lang || 'code', code: code.trim() });
     return `___CODE_BLOCK_${codeBlocks.length - 1}___`;
   });
 
-  safeText = escapeHtml(safeText)
-    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.*?)\*/g, "<em>$1</em>")
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\n/g, "<br>");
+  let safe = escapeHtml(raw);
 
-  safeText = safeText.replace(/___CODE_BLOCK_(\d+)___/g, (match, index) => {
-    return `<pre><code>${escapeHtml(codeBlocks[Number(index)])}</code></pre>`;
+  // Headers
+  safe = safe
+    .replace(/^### (.*$)/gim, '<h4 style="margin:8px 0 4px;font-size:1.05rem;color:var(--text-main);">$1</h4>')
+    .replace(/^## (.*$)/gim, '<h3 style="margin:10px 0 6px;font-size:1.15rem;color:var(--text-main);">$1</h3>')
+    .replace(/^# (.*$)/gim, '<h2 style="margin:12px 0 8px;font-size:1.25rem;color:var(--text-main);">$1</h2>');
+
+  // Bold & Italics
+  safe = safe
+    .replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+  // Inline Code
+  safe = safe.replace(/`([^`]+)`/g, '<code style="background:rgba(255,255,255,0.08);padding:2px 6px;border-radius:4px;font-family:monospace;font-size:0.88rem;color:#38bdf8;">$1</code>');
+
+  // Blockquotes
+  safe = safe.replace(/^\&gt;\s?(.*$)/gim, '<blockquote style="border-left:3px solid var(--accent);margin:6px 0;padding-left:10px;color:var(--text-muted);">$1</blockquote>');
+
+  // List bullets
+  safe = safe
+    .replace(/^[\*\-\•]\s+(.*$)/gim, '<div style="margin:3px 0 3px 14px;display:flex;gap:6px;"><span style="color:var(--primary);">&bull;</span><span>$1</span></div>')
+    .replace(/^(\d+)\.\s+(.*$)/gim, '<div style="margin:3px 0 3px 14px;display:flex;gap:6px;"><span style="color:var(--accent);font-weight:600;">$1.</span><span>$2</span></div>');
+
+  // Line breaks
+  safe = safe.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>');
+
+  // Restore Code Blocks with interactive Copy Code buttons
+  safe = safe.replace(/___CODE_BLOCK_(\d+)___/g, (match, index) => {
+    const item = codeBlocks[Number(index)] || { lang: 'code', code: '' };
+    const codeId = 'code-' + Math.random().toString(36).substring(2, 9);
+    return `
+      <div class="code-container">
+        <div class="code-header">
+          <span><i class="fa-solid fa-code"></i> ${escapeHtml(item.lang)}</span>
+          <button type="button" class="code-copy-btn" data-copy-code="${codeId}" title="Copy code to clipboard">
+            <i class="fa-regular fa-copy"></i> Copy
+          </button>
+        </div>
+        <pre><code id="${codeId}">${escapeHtml(item.code)}</code></pre>
+      </div>`;
   });
 
-  return safeText;
+  return safe;
+}
+
+function showAiSettingsModal() {
+  const container = document.getElementById("aiSettingsModalWrap");
+  if (!container) return;
+
+  const currentProvider = (state.ai && state.ai.provider) || "instant-free";
+  const currentKey = (state.ai && state.ai.apiKey) || "";
+
+  container.innerHTML = `
+    <div class="sarathi-modal-backdrop" id="aiModalBackdrop">
+      <div class="sarathi-modal">
+        <div class="sarathi-modal-header">
+          <h3><i class="fa-solid fa-sliders" style="color:var(--primary);"></i> AI Model & Accuracy Settings</h3>
+          <button type="button" class="sarathi-modal-close" id="closeAiModalBtn">&times;</button>
+        </div>
+
+        <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:14px;">
+          Choose your AI cognitive engine. Models provide deep step-by-step reasoning, verified facts, and full document & slides Q&A support.
+        </p>
+
+        <div class="model-option-card ${currentProvider === 'instant-free' ? 'selected' : ''}" data-model-id="instant-free">
+          <i class="fa-solid fa-bolt" style="color:#10b981; font-size:1.2rem; margin-top:2px;"></i>
+          <div class="model-option-info">
+            <h4>sArathI Instant AI <span class="pill pill-high" style="font-size:0.65rem;">100% Free · Zero Setup</span></h4>
+            <p>Fast, high-accuracy conversational AI. Works instantly out-of-the-box with zero API key required.</p>
+          </div>
+        </div>
+
+        <div class="model-option-card ${currentProvider === 'gemini' ? 'selected' : ''}" data-model-id="gemini">
+          <i class="fa-solid fa-wand-magic-sparkles" style="color:#06b6d4; font-size:1.2rem; margin-top:2px;"></i>
+          <div class="model-option-info">
+            <h4>Google Gemini 2.0 Flash <span class="pill pill-mid" style="font-size:0.65rem;">1M Context</span></h4>
+            <p>Google's frontier multimodal model. Exceptional on large documents, proofs, and complex code. Free Google AI Studio API key.</p>
+          </div>
+        </div>
+
+        <div class="model-option-card ${currentProvider === 'groq' ? 'selected' : ''}" data-model-id="groq">
+          <i class="fa-solid fa-gauge-high" style="color:#f59e0b; font-size:1.2rem; margin-top:2px;"></i>
+          <div class="model-option-info">
+            <h4>Groq Llama 3.3 70B <span class="pill pill-mid" style="font-size:0.65rem;">300+ Tokens/Sec</span></h4>
+            <p>Blazing low-latency inference with near-GPT-4o reasoning. Free API key from console.groq.com.</p>
+          </div>
+        </div>
+
+        <div class="model-option-card ${currentProvider === 'deepseek' ? 'selected' : ''}" data-model-id="deepseek">
+          <i class="fa-solid fa-brain" style="color:#8b5cf6; font-size:1.2rem; margin-top:2px;"></i>
+          <div class="model-option-info">
+            <h4>DeepSeek R1 Reasoning <span class="pill pill-mid" style="font-size:0.65rem;">Deep Logic</span></h4>
+            <p>Deep-thinking reasoning model for intricate math proofs and algorithmic problems.</p>
+          </div>
+        </div>
+
+        <div class="field" style="margin-top:16px;">
+          <label for="aiApiKeyInput">Custom API Key (Optional for Gemini / Groq)</label>
+          <input id="aiApiKeyInput" type="password" placeholder="Enter Gemini or Groq API key (optional)" value="${escapeHtml(currentKey)}" />
+          <small style="font-size:0.75rem; color:var(--text-muted); display:block; margin-top:4px;">
+            Free API Keys: <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent);">Google AI Studio</a> &middot; <a href="https://console.groq.com/keys" target="_blank" style="color:var(--accent);">Groq Console</a>. Key is securely stored only on this device.
+          </small>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:18px;">
+          <button type="button" class="btn-secondary" id="cancelAiModalBtn">Cancel</button>
+          <button type="button" class="btn-primary" id="saveAiSettingsBtn"><i class="fa-solid fa-check"></i> Save & Apply</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  let selectedProvider = currentProvider;
+  document.querySelectorAll(".model-option-card").forEach(card => {
+    card.addEventListener("click", () => {
+      document.querySelectorAll(".model-option-card").forEach(c => c.classList.remove("selected"));
+      card.classList.add("selected");
+      selectedProvider = card.getAttribute("data-model-id");
+    });
+  });
+
+  const closeModal = () => { container.innerHTML = ""; };
+  const closeBtn = document.getElementById("closeAiModalBtn");
+  if (closeBtn) closeBtn.addEventListener("click", closeModal);
+  const cancelBtn = document.getElementById("cancelAiModalBtn");
+  if (cancelBtn) cancelBtn.addEventListener("click", closeModal);
+  const backdrop = document.getElementById("aiModalBackdrop");
+  if (backdrop) backdrop.addEventListener("click", (e) => { if (e.target === backdrop) closeModal(); });
+
+  const saveBtn = document.getElementById("saveAiSettingsBtn");
+  if (saveBtn) {
+    saveBtn.addEventListener("click", () => {
+      const keyInput = document.getElementById("aiApiKeyInput");
+      if (!state.ai) state.ai = structuredClone(DEFAULT_AI);
+      state.ai.provider = selectedProvider;
+      state.ai.apiKey = keyInput ? keyInput.value.trim() : "";
+      saveState();
+      closeModal();
+      render();
+    });
+  }
 }
 
 function attachHandlers() {
@@ -3127,15 +4045,141 @@ function attachHandlers() {
     });
   }
 
+  // AI Controls: Model Selector Modal
+  const openAiSettingsBtn = document.getElementById("openAiSettingsBtn");
+  if (openAiSettingsBtn) {
+    openAiSettingsBtn.addEventListener("click", showAiSettingsModal);
+  }
+
+  // AI Controls: Document Upload
+  const docUploadInput = document.getElementById("docUploadInput");
+  if (docUploadInput) {
+    docUploadInput.addEventListener("change", e => {
+      if (e.target.files && e.target.files[0]) {
+        handleDocumentUpload(e.target.files[0]);
+      }
+    });
+  }
+
+  // AI Controls: Clear Document
+  const clearDocBtn = document.getElementById("clearDocBtn");
+  if (clearDocBtn) {
+    clearDocBtn.addEventListener("click", () => {
+      if (state.ai) state.ai.activeDocument = null;
+      saveState();
+      render();
+    });
+  }
+
+  // AI Controls: Auto Voice Toggle
+  const voiceToggleBtn = document.getElementById("voiceToggleBtn");
+  if (voiceToggleBtn) {
+    voiceToggleBtn.addEventListener("click", () => {
+      if (!state.ai) state.ai = structuredClone(DEFAULT_AI);
+      state.ai.autoSpeak = !state.ai.autoSpeak;
+      saveState();
+      render();
+    });
+  }
+
+  // AI Controls: New Chat
+  const newChatBtn = document.getElementById("newChatBtn");
+  if (newChatBtn) {
+    newChatBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      startNewChat();
+    });
+  }
+
+  // AI Controls: Voice Microphone Input (Speech-to-Text)
+  const voiceMicBtn = document.getElementById("voiceMicBtn");
+  if (voiceMicBtn) {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      let recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = "en-IN";
+
+      recognition.onstart = () => {
+        voiceMicBtn.classList.add("recording");
+        voiceMicBtn.innerHTML = '<i class="fa-solid fa-microphone-lines"></i>';
+      };
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        const input = document.getElementById("chatInput");
+        if (input) {
+          input.value = (input.value ? input.value + " " : "") + transcript;
+          input.focus();
+        }
+      };
+      recognition.onerror = (e) => {
+        console.warn("Speech recognition error:", e.error);
+        voiceMicBtn.classList.remove("recording");
+        voiceMicBtn.innerHTML = '<i class="fa-solid fa-microphone"></i>';
+      };
+      recognition.onend = () => {
+        voiceMicBtn.classList.remove("recording");
+        voiceMicBtn.innerHTML = '<i class="fa-solid fa-microphone"></i>';
+      };
+
+      voiceMicBtn.addEventListener("click", () => {
+        try {
+          recognition.start();
+        } catch (e) {
+          recognition.stop();
+        }
+      });
+    } else {
+      voiceMicBtn.title = "Voice recognition not supported in this browser";
+      voiceMicBtn.style.opacity = "0.5";
+    }
+  }
+
+  // Chat Form & Multiline Auto-Resize Textarea
   const chatForm = document.getElementById("chatForm");
+  const chatInput = document.getElementById("chatInput");
+  if (chatInput) {
+    chatInput.addEventListener("keydown", e => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        if (chatForm && typeof chatForm.requestSubmit === "function") {
+          chatForm.requestSubmit();
+        } else {
+          sendTutorMessage(chatInput.value);
+          chatInput.value = "";
+        }
+      }
+    });
+  }
+
   if (chatForm) {
     chatForm.addEventListener("submit", e => {
       e.preventDefault();
       const input = document.getElementById("chatInput");
-      sendTutorMessage(input.value);
-      input.value = "";
+      if (input && input.value.trim()) {
+        sendTutorMessage(input.value);
+        input.value = "";
+      }
     });
   }
+
+  // Copy Code Block Buttons
+  document.querySelectorAll("[data-copy-code]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const codeId = btn.getAttribute("data-copy-code");
+      const codeEl = document.getElementById(codeId);
+      if (codeEl) {
+        navigator.clipboard.writeText(codeEl.innerText).then(() => {
+          const original = btn.innerHTML;
+          btn.innerHTML = `<i class="fa-solid fa-check" style="color:#10b981;"></i> Copied!`;
+          setTimeout(() => { btn.innerHTML = original; }, 2000);
+        });
+      }
+    });
+  });
+
+  // Note: Message action buttons (Copy, Listen, Marathi Listen, Teach) are handled by unified global click delegation.
 
   document.querySelectorAll("[data-send-text]").forEach(el => {
     el.addEventListener("click", () => {
@@ -3281,7 +4325,7 @@ function renderBackendDataView() {
     <section class="page" id="backendPage">
       <header class="page-header">
         <h1><i class="fa-solid fa-database" style="color:var(--accent);"></i> Backend & SQL Database Explorer</h1>
-        <p class="page-sub">Live view of the YUKTARA PostgreSQL database — Users, Auth Logs, Quiz Attempts & Live SQL Runner.</p>
+        <p class="page-sub">Live view of the sArathI PostgreSQL database — Users, Auth Logs, Quiz Attempts & Live SQL Runner.</p>
       </header>
 
       <!-- Summary Cards -->
@@ -3719,46 +4763,68 @@ async function runSqlQuery() {
 }
 
 /* --------------------------------------------------------------------------
-   Floating "Ask YuktaraAI" Selection Popup
+   Floating "Ask sArathI AI" Selection Toolbar & Copy Toast
    -------------------------------------------------------------------------- */
 let _selectionPopup = null;
+let _copyToast = null;
 
 function createSelectionPopup() {
   if (_selectionPopup) return;
   const popup = document.createElement("div");
-  popup.id = "yuktaraAiSelectionPopup";
-  popup.className = "yuktara-selection-popup";
-  popup.innerHTML = `<i class="fa-solid fa-robot"></i> Ask YuktaraAI`;
+  popup.id = "sarathiAiSelectionPopup";
+  popup.className = "sarathi-selection-popup";
+  popup.innerHTML = `
+    <button class="selection-popup-btn selection-ask-btn" id="selectionAskSarathiBtn" title="Ask sArathI AI about selected text">
+      <i class="fa-solid fa-wand-magic-sparkles"></i> Ask sArathI AI
+    </button>
+    <button class="selection-popup-btn selection-copy-btn" id="selectionCopyBtn" title="Copy selected text">
+      <i class="fa-regular fa-copy"></i> Copy
+    </button>
+  `;
   popup.style.display = "none";
   document.body.appendChild(popup);
   _selectionPopup = popup;
 
-  popup.addEventListener("mousedown", (e) => {
-    e.preventDefault(); // Prevent losing selection
-    e.stopPropagation();
-    const selectedText = window.getSelection().toString().trim();
-    if (selectedText) {
-      // Clear selection and hide popup
-      window.getSelection().removeAllRanges();
-      popup.style.display = "none";
+  const askBtn = popup.querySelector("#selectionAskSarathiBtn");
+  const copyBtn = popup.querySelector("#selectionCopyBtn");
 
-      // Navigate to YuktaraAI and send message
+  askBtn.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const sel = window.getSelection();
+    const selectedText = sel ? sel.toString().trim() : "";
+    if (selectedText) {
+      sel.removeAllRanges();
+      popup.style.display = "none";
       goTo("tutor");
       sendTutorMessage(selectedText);
     }
   });
+
+  copyBtn.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const sel = window.getSelection();
+    const selectedText = sel ? sel.toString().trim() : "";
+    if (selectedText) {
+      navigator.clipboard.writeText(selectedText).then(() => {
+        copyBtn.innerHTML = `<i class="fa-solid fa-check" style="color:#10b981;"></i> Copied!`;
+        setTimeout(() => {
+          popup.style.display = "none";
+          copyBtn.innerHTML = `<i class="fa-regular fa-copy"></i> Copy`;
+        }, 1200);
+      });
+    }
+  });
 }
 
-document.addEventListener("mouseup", (e) => {
-  // Small delay to let selection finalize
+function handleSelectionEvent() {
   setTimeout(() => {
-    // If not authenticated, do not show selection popup
+    // If not authenticated or inside quiz before submit, don't show
     if (!state.auth || !state.auth.currentUser) {
       if (_selectionPopup) _selectionPopup.style.display = "none";
       return;
     }
-
-    // IMPORTANT: Disable AI popup while a quiz is active and not submitted
     if (state.activeQuiz && !state.activeQuiz.submitted) {
       if (_selectionPopup) _selectionPopup.style.display = "none";
       return;
@@ -3770,32 +4836,163 @@ document.addEventListener("mouseup", (e) => {
     if (!_selectionPopup) createSelectionPopup();
 
     if (selectedText.length > 2) {
-      // Don't show inside chat input or form inputs
+      // Don't show inside inputs / textareas
       const activeEl = document.activeElement;
       if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA" || activeEl.id === "chatInput")) {
         _selectionPopup.style.display = "none";
         return;
       }
 
-      // Position popup near cursor
+      if (sel.rangeCount === 0) {
+        _selectionPopup.style.display = "none";
+        return;
+      }
+
       const range = sel.getRangeAt(0);
       const rect = range.getBoundingClientRect();
-      const popupX = rect.left + (rect.width / 2);
-      const popupY = rect.top - 10 + window.scrollY;
+      if (!rect || rect.width === 0) {
+        _selectionPopup.style.display = "none";
+        return;
+      }
 
-      _selectionPopup.style.left = `${Math.max(10, popupX)}px`;
+      const popupX = rect.left + (rect.width / 2);
+      const nearTop = rect.top < 65;
+      const popupY = nearTop ? (rect.bottom + 8 + window.scrollY) : (rect.top - 10 + window.scrollY);
+
+      if (nearTop) {
+        _selectionPopup.classList.add("position-bottom");
+      } else {
+        _selectionPopup.classList.remove("position-bottom");
+      }
+
+      _selectionPopup.style.left = `${Math.max(12, Math.min(window.innerWidth - 130, popupX))}px`;
       _selectionPopup.style.top = `${Math.max(10, popupY)}px`;
       _selectionPopup.style.display = "flex";
     } else {
       _selectionPopup.style.display = "none";
     }
   }, 10);
+}
+
+document.addEventListener("mouseup", handleSelectionEvent);
+document.addEventListener("keyup", (e) => {
+  if (e.shiftKey || e.key === "Shift") handleSelectionEvent();
 });
 
 // Hide popup when clicking elsewhere
 document.addEventListener("mousedown", (e) => {
   if (_selectionPopup && e.target !== _selectionPopup && !_selectionPopup.contains(e.target)) {
     _selectionPopup.style.display = "none";
+  }
+});
+
+// Trigger Ask sArathI prompt when user copies text (Ctrl+C or right-click Copy)
+document.addEventListener("copy", () => {
+  const sel = window.getSelection();
+  const selectedText = sel ? sel.toString().trim() : "";
+  if (selectedText && selectedText.length > 2 && selectedText.length < 500) {
+    showCopiedAskSarathiToast(selectedText);
+  }
+});
+
+function showCopiedAskSarathiToast(text) {
+  if (_copyToast) _copyToast.remove();
+  const toast = document.createElement("div");
+  toast.className = "sarathi-copy-toast";
+  toast.innerHTML = `
+    <span><i class="fa-solid fa-copy" style="color:#10b981;"></i> Copied!</span>
+    <span>Ask sArathI about this?</span>
+    <button class="sarathi-copy-toast-btn" id="toastAskBtn">
+      <i class="fa-solid fa-wand-magic-sparkles"></i> Ask sArathI AI
+    </button>
+    <button class="sarathi-copy-toast-close" id="toastCloseBtn">&times;</button>
+  `;
+  document.body.appendChild(toast);
+  _copyToast = toast;
+
+  const askBtn = toast.querySelector("#toastAskBtn");
+  const closeBtn = toast.querySelector("#toastCloseBtn");
+
+  askBtn.addEventListener("click", () => {
+    toast.remove();
+    _copyToast = null;
+    goTo("tutor");
+    sendTutorMessage(text);
+  });
+
+  closeBtn.addEventListener("click", () => {
+    toast.remove();
+    _copyToast = null;
+  });
+
+  setTimeout(() => {
+    if (toast.parentNode) {
+      toast.style.transition = "opacity 0.3s ease, transform 0.3s ease";
+      toast.style.opacity = "0";
+      toast.style.transform = "translateY(15px)";
+      setTimeout(() => toast.remove(), 300);
+    }
+  }, 5000);
+}
+
+// Global Delegation: New Chat Button
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest("#newChatBtn, [data-action='new-chat']");
+  if (btn) {
+    e.preventDefault();
+    startNewChat();
+  }
+});
+
+// Unified Global Delegation for Message Actions (Guarantees single firing & single voice stream)
+document.addEventListener("click", (e) => {
+  // 1. Copy Message
+  const copyBtn = e.target.closest("[data-copy-msg]");
+  if (copyBtn) {
+    e.preventDefault();
+    e.stopPropagation();
+    const idx = Number(copyBtn.getAttribute("data-copy-msg"));
+    const msg = state.chat && state.chat[idx];
+    if (msg) {
+      navigator.clipboard.writeText(msg.text).then(() => {
+        const orig = copyBtn.innerHTML;
+        copyBtn.innerHTML = `<i class="fa-solid fa-check" style="color:#10b981;"></i> Copied!`;
+        setTimeout(() => { copyBtn.innerHTML = orig; }, 1500);
+      });
+    }
+    return;
+  }
+
+  // 2. Speak English (TTS)
+  const speakBtn = e.target.closest("[data-speak-msg]");
+  if (speakBtn) {
+    e.preventDefault();
+    e.stopPropagation();
+    const idx = Number(speakBtn.getAttribute("data-speak-msg"));
+    const msg = state.chat && state.chat[idx];
+    if (msg) speakText(msg.text, "en");
+    return;
+  }
+
+  // 3. Speak Marathi (TTS)
+  const speakMrBtn = e.target.closest("[data-speak-mr-msg]");
+  if (speakMrBtn) {
+    e.preventDefault();
+    e.stopPropagation();
+    const idx = Number(speakMrBtn.getAttribute("data-speak-mr-msg"));
+    const msg = state.chat && state.chat[idx];
+    if (msg) speakText(msg.text, "mr");
+    return;
+  }
+
+  // 4. Teach sArathI AI
+  const teachBtn = e.target.closest("[data-teach-ai]");
+  if (teachBtn) {
+    e.preventDefault();
+    e.stopPropagation();
+    const idx = Number(teachBtn.getAttribute("data-teach-ai"));
+    openTeachModal(idx);
+    return;
   }
 });
 

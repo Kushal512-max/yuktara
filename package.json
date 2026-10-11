@@ -1,7 +1,7 @@
 {
-  "name": "yuktara-learning-assistant",
+  "name": "sarathi-learning-assistant",
   "version": "3.0.0",
-  "description": "YUKTARA — AI-powered study planner with YuktaraAI tutor, adaptive quiz system, and PostgreSQL backend via Netlify Functions.",
+  "description": "sArathI — AI-powered study planner with sArathI AI live LLM tutor, document upload Q&A, adaptive quiz system, and PostgreSQL backend via Netlify Functions.",
   "main": "server.js",
   "scripts": {
     "dev": "node server.js",
@@ -12,15 +12,16 @@
   "keywords": [
     "education",
     "learning-assistant",
+    "ai-tutor",
     "quiz-system",
     "postgresql",
     "netlify-functions",
     "node"
   ],
-  "author": "YUKTARA Team",
+  "author": "sArathI Team",
   "license": "MIT",
   "dependencies": {
     "bcryptjs": "^2.4.3",
-    "pg": "^8.13.3"
+    "pg": "^8.23.1"
   }
 }

@@ -1,0 +1,434 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "name": "Demo Student",
+      "email": "abc@gmail.com",
+      "password_hash": "$2a$10$2dPO62E2VdryRPLDfw1KoOgvQD4maJ5Dl00T.VRmETjOiz9f9KKIG",
+      "role": "student",
+      "created_at": "2026-10-10T13:50:34.253Z",
+      "last_login_at": "2026-10-10T13:50:34.255Z"
+    },
+    {
+      "id": 2,
+      "name": "sArathI Administrator",
+      "email": "admin@sarathi.edu",
+      "password_hash": "$2a$10$.b.rstBCbPPqR0nU2wiDeuOz9pmAbXr/mVmKLYnE3kD8iZ6no16Km",
+      "role": "admin",
+      "created_at": "2026-10-10T13:50:34.266Z",
+      "last_login_at": "2026-10-11T09:09:55.437Z"
+    },
+    {
+      "id": 3,
+      "name": "sArathI Administrator",
+      "email": "admin@yuktara.edu",
+      "password_hash": "$2a$10$.b.rstBCbPPqR0nU2wiDeuOz9pmAbXr/mVmKLYnE3kD8iZ6no16Km",
+      "role": "admin",
+      "created_at": "2026-10-10T13:50:34.270Z",
+      "last_login_at": "2026-10-10T13:50:34.270Z"
+    },
+    {
+      "id": 4,
+      "name": "Tejas Ajit Ostwal",
+      "email": "tejasostwal@gmail.com",
+      "password_hash": "$2a$10$2dPO62E2VdryRPLDfw1KoOgvQD4maJ5Dl00T.VRmETjOiz9f9KKIG",
+      "role": "student",
+      "created_at": "2026-10-10T13:50:34.273Z",
+      "last_login_at": "2026-10-11T09:07:32.450Z"
+    },
+    {
+      "id": 5,
+      "name": "Soham",
+      "email": "soham@gmail.com",
+      "password_hash": "$2a$12$ygOrEjChhMp.Sd06bWzYBOT5vBAftGTGRD1x5HbouY14EQYksRGDy",
+      "role": "student",
+      "created_at": "2026-10-10T14:18:47.732Z",
+      "last_login_at": "2026-10-10T14:18:47.732Z"
+    }
+  ],
+  "auth_logs": [
+    {
+      "id": 1,
+      "user_id": 4,
+      "email": "tejasostwal@gmail.com",
+      "action": "REGISTER",
+      "ip_address": "152.59.61.88",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128.0.0.0",
+      "status": "SUCCESS",
+      "created_at": "2026-10-10T13:50:34.275Z"
+    },
+    {
+      "id": 2,
+      "user_id": 4,
+      "email": "tejasostwal@gmail.com",
+      "action": "LOGIN_SUCCESS",
+      "ip_address": "0.0.0.0",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "status": "SUCCESS",
+      "created_at": "2026-10-10T13:57:14.173Z"
+    },
+    {
+      "id": 3,
+      "user_id": null,
+      "email": "tejasostwal@gmail.com",
+      "action": "AUTH_EVENT",
+      "ip_address": "0.0.0.0",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "status": "FAILED",
+      "created_at": "2026-10-10T14:13:08.641Z"
+    },
+    {
+      "id": 4,
+      "user_id": 2,
+      "email": "admin@sarathi.edu",
+      "action": "LOGIN_SUCCESS",
+      "ip_address": "0.0.0.0",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "status": "SUCCESS",
+      "created_at": "2026-10-10T14:14:43.162Z"
+    },
+    {
+      "id": 5,
+      "user_id": null,
+      "email": "admin@sarathi.edu",
+      "action": "AUTH_EVENT",
+      "ip_address": "0.0.0.0",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "status": "FAILED",
+      "created_at": "2026-10-10T14:17:59.965Z"
+    },
+    {
+      "id": 6,
+      "user_id": 5,
+      "email": "soham@gmail.com",
+      "action": "AUTH_EVENT",
+      "ip_address": "0.0.0.0",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "status": "SUCCESS",
+      "created_at": "2026-10-10T14:18:47.745Z"
+    },
+    {
+      "id": 7,
+      "user_id": 4,
+      "email": "tejasostwal@gmail.com",
+      "action": "LOGIN_FAILED",
+      "ip_address": "0.0.0.0",
+      "user_agent": "node",
+      "status": "FAILED",
+      "created_at": "2026-10-10T14:30:43.370Z"
+    },
+    {
+      "id": 8,
+      "user_id": 4,
+      "email": "tejasostwal@gmail.com",
+      "action": "LOGIN_SUCCESS",
+      "ip_address": "0.0.0.0",
+      "user_agent": "node",
+      "status": "SUCCESS",
+      "created_at": "2026-10-10T14:32:21.162Z"
+    },
+    {
+      "id": 9,
+      "user_id": 4,
+      "email": "tejasostwal@gmail.com",
+      "action": "LOGIN_SUCCESS",
+      "ip_address": "0.0.0.0",
+      "user_agent": "node",
+      "status": "SUCCESS",
+      "created_at": "2026-10-10T14:34:24.109Z"
+    },
+    {
+      "id": 10,
+      "user_id": 4,
+      "email": "tejasostwal@gmail.com",
+      "action": "LOGIN_SUCCESS",
+      "ip_address": "0.0.0.0",
+      "user_agent": "node",
+      "status": "SUCCESS",
+      "created_at": "2026-10-10T14:35:38.817Z"
+    },
+    {
+      "id": 11,
+      "user_id": 4,
+      "email": "tejasostwal@gmail.com",
+      "action": "LOGIN_SUCCESS",
+      "ip_address": "0.0.0.0",
+      "user_agent": "node",
+      "status": "SUCCESS",
+      "created_at": "2026-10-10T14:36:27.243Z"
+    },
+    {
+      "id": 12,
+      "user_id": null,
+      "email": "soham@gmail.com",
+      "action": "AUTH_EVENT",
+      "ip_address": "0.0.0.0",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "status": "FAILED",
+      "created_at": "2026-10-10T14:37:44.936Z"
+    },
+    {
+      "id": 13,
+      "user_id": 2,
+      "email": "admin@sarathi.edu",
+      "action": "LOGIN_SUCCESS",
+      "ip_address": "0.0.0.0",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "status": "SUCCESS",
+      "created_at": "2026-10-10T14:37:46.338Z"
+    },
+    {
+      "id": 14,
+      "user_id": null,
+      "email": "admin@sarathi.edu",
+      "action": "AUTH_EVENT",
+      "ip_address": "0.0.0.0",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "status": "FAILED",
+      "created_at": "2026-10-10T16:30:16.990Z"
+    },
+    {
+      "id": 15,
+      "user_id": 4,
+      "email": "tejasostwal@gmail.com",
+      "action": "LOGIN_SUCCESS",
+      "ip_address": "0.0.0.0",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "status": "SUCCESS",
+      "created_at": "2026-10-10T16:30:18.896Z"
+    },
+    {
+      "id": 16,
+      "user_id": null,
+      "email": "tejasostwal@gmail.com",
+      "action": "AUTH_EVENT",
+      "ip_address": "0.0.0.0",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "status": "FAILED",
+      "created_at": "2026-10-10T16:30:47.346Z"
+    },
+    {
+      "id": 17,
+      "user_id": 2,
+      "email": "admin@sarathi.edu",
+      "action": "LOGIN_SUCCESS",
+      "ip_address": "0.0.0.0",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "status": "SUCCESS",
+      "created_at": "2026-10-10T16:30:50.361Z"
+    },
+    {
+      "id": 18,
+      "user_id": 4,
+      "email": "tejasostwal@gmail.com",
+      "action": "LOGIN_SUCCESS",
+      "ip_address": "0.0.0.0",
+      "user_agent": "node",
+      "status": "SUCCESS",
+      "created_at": "2026-10-10T16:35:33.684Z"
+    },
+    {
+      "id": 19,
+      "user_id": 4,
+      "email": "tejasostwal@gmail.com",
+      "action": "LOGIN_SUCCESS",
+      "ip_address": "0.0.0.0",
+      "user_agent": "node",
+      "status": "SUCCESS",
+      "created_at": "2026-10-11T08:50:05.586Z"
+    },
+    {
+      "id": 20,
+      "user_id": 4,
+      "email": "tejasostwal@gmail.com",
+      "action": "LOGIN_SUCCESS",
+      "ip_address": "0.0.0.0",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "status": "SUCCESS",
+      "created_at": "2026-10-11T09:06:22.664Z"
+    },
+    {
+      "id": 21,
+      "user_id": null,
+      "email": "tejasostwal@gmail.com",
+      "action": "AUTH_EVENT",
+      "ip_address": "0.0.0.0",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "status": "FAILED",
+      "created_at": "2026-10-11T09:06:30.706Z"
+    },
+    {
+      "id": 22,
+      "user_id": 2,
+      "email": "admin@sarathi.edu",
+      "action": "LOGIN_SUCCESS",
+      "ip_address": "0.0.0.0",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "status": "SUCCESS",
+      "created_at": "2026-10-11T09:06:32.898Z"
+    },
+    {
+      "id": 23,
+      "user_id": 2,
+      "email": "admin@sarathi.edu",
+      "action": "LOGIN_SUCCESS",
+      "ip_address": "0.0.0.0",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "status": "SUCCESS",
+      "created_at": "2026-10-11T09:07:07.408Z"
+    },
+    {
+      "id": 24,
+      "user_id": null,
+      "email": "admin@sarathi.edu",
+      "action": "AUTH_EVENT",
+      "ip_address": "0.0.0.0",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "status": "FAILED",
+      "created_at": "2026-10-11T09:07:30.456Z"
+    },
+    {
+      "id": 25,
+      "user_id": 4,
+      "email": "tejasostwal@gmail.com",
+      "action": "LOGIN_SUCCESS",
+      "ip_address": "0.0.0.0",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "status": "SUCCESS",
+      "created_at": "2026-10-11T09:07:32.454Z"
+    },
+    {
+      "id": 26,
+      "user_id": null,
+      "email": "admin@sarathi.edu",
+      "action": "AUTH_EVENT",
+      "ip_address": "0.0.0.0",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "status": "FAILED",
+      "created_at": "2026-10-11T09:08:39.886Z"
+    },
+    {
+      "id": 27,
+      "user_id": 2,
+      "email": "admin@sarathi.edu",
+      "action": "LOGIN_SUCCESS",
+      "ip_address": "0.0.0.0",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "status": "SUCCESS",
+      "created_at": "2026-10-11T09:09:55.443Z"
+    },
+    {
+      "id": 28,
+      "user_id": null,
+      "email": "admin@sarathi.edu",
+      "action": "AUTH_EVENT",
+      "ip_address": "0.0.0.0",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+      "status": "FAILED",
+      "created_at": "2026-10-11T09:11:45.103Z"
+    }
+  ],
+  "quiz_attempts": [
+    {
+      "id": 1,
+      "user_id": 4,
+      "user_email": "tejasostwal@gmail.com",
+      "user_name": "Tejas Ajit Ostwal",
+      "subject": "Python Programming",
+      "topic_id": "py-basics",
+      "topic_name": "Getting Started & Data Types",
+      "question_count": 10,
+      "score": 0,
+      "percentage": 0,
+      "mode": "practice",
+      "time_spent_seconds": 0,
+      "answers_json": "{}",
+      "submitted_at": "2026-10-10T13:50:34.279Z"
+    },
+    {
+      "id": 2,
+      "user_id": 5,
+      "user_email": "soham@gmail.com",
+      "user_name": "Soham",
+      "subject": "Discrete Mathematics & Statistics",
+      "topic_id": "dm-u1",
+      "topic_name": "Unit 1: Set Theory & Mathematical Logic",
+      "question_count": 11,
+      "score": 3,
+      "percentage": 27,
+      "mode": "practice",
+      "time_spent_seconds": 0,
+      "answers_json": "[{\"type\":\"mcq\",\"q\":\"What is the Symmetric Difference of two sets A and B (A ⊕ B)?\",\"userChoice\":2,\"correctChoice\":1,\"options\":[\"(A ∪ B) ∩ (A ∩ B)\",\"(A ∪ B) - (A ∩ B)\",\"A ∩ B\",\"Complement of (A ∪ B)\"],\"isCorrect\":false,\"explanation\":\"Symmetric difference contains elements that belong to either set A or B, but not both: (A - B) ∪ (B - A).\",\"difficulty\":\"Beginner\"},{\"type\":\"mcq\",\"q\":\"What is a compound proposition that is always TRUE regardless of the truth values of its constituent variables?\",\"userChoice\":1,\"correctChoice\":1,\"options\":[\"Contradiction\",\"Tautology\",\"Contingency\",\"Fallacy\"],\"isCorrect\":true,\"explanation\":\"A tautology is a formula that evaluates to true under all possible truth value assignments.\",\"difficulty\":\"Beginner\"},{\"type\":\"mcq\",\"q\":\"What is a Bijective function?\",\"userChoice\":2,\"correctChoice\":2,\"options\":[\"Injective only\",\"Surjective only\",\"Both Injective and Surjective (One-to-One and Onto)\",\"Neither injective nor surjective\"],\"isCorrect\":true,\"explanation\":\"Bijective functions are both injective and surjective, establishing an exact one-to-one correspondence.\",\"difficulty\":\"Beginner\"},{\"type\":\"mcq\",\"q\":\"What is the contrapositive of the conditional statement 'If p, then q' (p → q)?\",\"userChoice\":0,\"correctChoice\":2,\"options\":[\"q → p\",\"¬p → ¬q\",\"¬q → ¬p\",\"¬p ∨ q\"],\"isCorrect\":false,\"explanation\":\"The contrapositive (¬q → ¬p) is logically equivalent to the original conditional statement (p → q).\",\"difficulty\":\"Beginner\"},{\"type\":\"mcq\",\"q\":\"What is Modus Tollens in formal logic?\",\"userChoice\":1,\"correctChoice\":0,\"options\":[\"[¬q ∧ (p → q)] ⊢ ¬p (denying the consequent)\",\"[p ∧ (p → q)] ⊢ q\",\"[p ∨ q] ⊢ p\",\"¬(¬p) ≡ p\"],\"isCorrect\":false,\"explanation\":\"Modus Tollens: If 'if p then q' holds, and q is false, then p must be false.\",\"difficulty\":\"Intermediate\"},{\"type\":\"mcq\",\"q\":\"In a set of 100 students, 60 study AI, 50 study Data Science, and 20 study both. How many study at least one subject?\",\"userChoice\":2,\"correctChoice\":1,\"options\":[\"110\",\"90\",\"70\",\"80\"],\"isCorrect\":false,\"explanation\":\"Principle of Inclusion-Exclusion: |A ∪ B| = |A| + |B| - |A ∩ B| = 60 + 50 - 20 = 90 students.\",\"difficulty\":\"Intermediate\"},{\"type\":\"mcq\",\"q\":\"A relation R on a set A is an Equivalence Relation if and only if it satisfies which three properties?\",\"userChoice\":3,\"correctChoice\":0,\"options\":[\"Reflexive, Symmetric, and Transitive\",\"Reflexive, Antisymmetric, and Transitive\",\"Irreflexive, Symmetric, and Transitive\",\"Reflexive, Asymmetric, and Total\"],\"isCorrect\":false,\"explanation\":\"Equivalence relations must be simultaneously reflexive (aRa), symmetric (aRb => bRa), and transitive (aRb & bRc => aRc).\",\"difficulty\":\"Beginner\"},{\"type\":\"mcq\",\"q\":\"If a set S has n elements, what is the cardinality of its Power Set P(S)?\",\"userChoice\":0,\"correctChoice\":1,\"options\":[\"n^2\",\"2^n\",\"2n\",\"n!\"],\"isCorrect\":false,\"explanation\":\"Each element can either be included or excluded from a subset, yielding 2^n possible subsets in the power set.\",\"difficulty\":\"Beginner\"},{\"type\":\"mcq\",\"q\":\"Which law states that p ∨ (q ∧ r) ≡ (p ∨ q) ∧ (p ∨ r)?\",\"userChoice\":1,\"correctChoice\":1,\"options\":[\"Associative Law\",\"Distributive Law\",\"Commutative Law\",\"Absorption Law\"],\"isCorrect\":true,\"explanation\":\"The Distributive Law distributes disjunction over conjunction across compound expressions.\",\"difficulty\":\"Intermediate\"},{\"type\":\"mcq\",\"q\":\"What is the negation of the quantified statement: ∀x P(x)?\",\"userChoice\":2,\"correctChoice\":1,\"options\":[\"∀x ¬P(x)\",\"∃x ¬P(x)\",\"¬∃x P(x)\",\"∃x P(x)\"],\"isCorrect\":false,\"explanation\":\"Negating 'for all x, P(x) holds' yields 'there exists an x such that P(x) does not hold': ∃x ¬P(x).\",\"difficulty\":\"Intermediate\"},{\"type\":\"short\",\"q\":\"Briefly describe Sets and set operations (union, intersection, complement).\",\"userText\":\"asc\",\"score\":0,\"matchedKeywords\":[],\"missedKeywords\":[\"Sets\",\"set operations (union, intersection, complement)\",\"concept\",\"system\",\"application\"],\"modelAnswer\":\"The model answer covers Sets and set operations (union, intersection, complement) comprehensively.\",\"explanation\":\"Response evaluated based on keyword accuracy and conceptual clarity.\"}]",
+      "submitted_at": "2026-10-10T14:20:04.109Z"
+    }
+  ],
+  "study_sessions": [
+    {
+      "id": 1,
+      "user_id": 4,
+      "user_email": "tejasostwal@gmail.com",
+      "subject": "Python Programming",
+      "topic_id": "py-basics",
+      "subtopic": "Basic Types (int, float, str, bool)",
+      "duration_minutes": 30,
+      "status": "COMPLETED",
+      "created_at": "2026-10-10T13:50:34.284Z"
+    },
+    {
+      "id": 2,
+      "user_id": 4,
+      "user_email": "tejasostwal@gmail.com",
+      "subject": "Python Programming",
+      "topic_id": "py-basics",
+      "subtopic": "Console I/O & F-Strings",
+      "duration_minutes": 30,
+      "status": "COMPLETED",
+      "created_at": "2026-10-10T13:50:34.290Z"
+    },
+    {
+      "id": 3,
+      "user_id": 4,
+      "user_email": "tejasostwal@gmail.com",
+      "subject": "Python Programming",
+      "topic_id": "py-basics",
+      "subtopic": "Variables & Dynamic Typing",
+      "duration_minutes": 30,
+      "status": "COMPLETED",
+      "created_at": "2026-10-10T13:50:34.297Z"
+    },
+    {
+      "id": 4,
+      "user_id": 4,
+      "user_email": "tejasostwal@gmail.com",
+      "subject": "Python Programming",
+      "topic_id": "py-basics",
+      "subtopic": "Python Setup & Statements",
+      "duration_minutes": 30,
+      "status": "COMPLETED",
+      "created_at": "2026-10-10T13:50:34.299Z"
+    },
+    {
+      "id": 5,
+      "user_id": 2,
+      "user_email": "admin@sarathi.edu",
+      "subject": "Computer Networks",
+      "topic_id": "cn-u1-intro-phy-dll",
+      "subtopic": "Layered Network Architecture: OSI 7-Layer Reference Model vs TCP/IP 4-Layer Protocol Suite",
+      "duration_minutes": 30,
+      "status": "COMPLETED",
+      "created_at": "2026-10-10T19:20:07.554Z"
+    },
+    {
+      "id": 6,
+      "user_id": 2,
+      "user_email": "admin@sarathi.edu",
+      "subject": "Computer Networks",
+      "topic_id": "cn-u1-intro-phy-dll",
+      "subtopic": "Network Topologies (Bus, Star, Ring, Mesh, Hybrid) & Classifications (LAN, MAN, WAN)",
+      "duration_minutes": 30,
+      "status": "COMPLETED",
+      "created_at": "2026-10-10T19:20:07.570Z"
+    }
+  ],
+  "chat_history": []
+}

@@ -73,6 +73,11 @@
   to = "/.netlify/functions/init-db"
   status = 200
 
+[[redirects]]
+  from = "/api/ai/chat"
+  to = "/.netlify/functions/ai-chat"
+  status = 200
+
 # SPA fallback — all non-file, non-api routes serve index.html
 [[redirects]]
   from = "/*"

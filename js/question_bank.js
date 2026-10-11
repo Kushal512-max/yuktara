@@ -10175,9 +10175,11 @@
   // Expose to window for browser access
   if (typeof window !== "undefined") {
     window.YUKTARA_QUESTION_BANK = QUESTION_BANK;
+    window.SARATHI_QUESTION_BANK = QUESTION_BANK;
   }
   if (typeof global !== "undefined") {
     global.YUKTARA_QUESTION_BANK = QUESTION_BANK;
+    global.SARATHI_QUESTION_BANK = QUESTION_BANK;
   }
   if (typeof module !== "undefined" && module.exports) {
     module.exports = QUESTION_BANK;

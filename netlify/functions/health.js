@@ -26,7 +26,7 @@ exports.handler = async (event) => {
       headers: CORS_HEADERS,
       body: JSON.stringify({
         status: 'error',
-        service: 'YUKTARA Backend (Netlify Functions)',
+        service: 'sArathI Backend (Netlify Functions)',
         database: 'PostgreSQL',
         databaseConfigured: false,
         error: 'DATABASE_URL environment variable is not configured in Netlify. Please add DATABASE_URL in Site configuration > Environment variables.',
@@ -42,7 +42,7 @@ exports.handler = async (event) => {
       headers: CORS_HEADERS,
       body: JSON.stringify({
         status: 'ok',
-        service: 'YUKTARA Backend (Netlify Functions)',
+        service: 'sArathI Backend (Netlify Functions)',
         database: 'PostgreSQL',
         databaseConfigured: true,
         connection: 'Connected successfully',
@@ -55,7 +55,7 @@ exports.handler = async (event) => {
       headers: CORS_HEADERS,
       body: JSON.stringify({
         status: 'error',
-        service: 'YUKTARA Backend (Netlify Functions)',
+        service: 'sArathI Backend (Netlify Functions)',
         database: 'PostgreSQL',
         databaseConfigured: true,
         error: `Database connection failed: ${err.message}`,
