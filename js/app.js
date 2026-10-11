@@ -179,9 +179,33 @@ function logoutUser() {
    Navigation & Role-Based Access Control
    -------------------------------------------------------------------------- */
 function isHostDevice() {
-  // On Netlify, admin access is controlled by the PostgreSQL user role, not IP/hostname.
-  // Return true so admin users can access the Backend & DB page from any device.
-  return true;
+  // Localhost is always authorized (developer machine)
+  const isLocal = window.location.hostname === "localhost" || 
+                  window.location.hostname === "127.0.0.1" || 
+                  window.location.protocol === "file:";
+  if (isLocal) return true;
+
+  // Check URL query parameter to authorize this specific device (e.g. ?dev=true or ?admin=1)
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("dev") === "true" || params.get("admin") === "1" || params.get("host") === "true") {
+      localStorage.setItem("yuktara_host_device", "true");
+      // Clean query params from address bar
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+      return true;
+    }
+  } catch (e) {}
+
+  // Check persistent device authorization stored in browser's localStorage
+  try {
+    if (localStorage.getItem("yuktara_host_device") === "true") {
+      return true;
+    }
+  } catch (e) {}
+
+  // Other remote devices (general public) are not authorized to see or use demo accounts
+  return false;
 }
 
 function isAdmin() {
@@ -2325,7 +2349,7 @@ function renderAuthPage() {
 
       <div class="auth-card">
         <div class="auth-brand">
-          <div class="auth-brand-icon">
+          <div class="auth-brand-icon" id="authBrandIcon" title="YUKTARA" style="cursor:pointer; user-select:none;">
             <i class="fa-solid fa-graduation-cap"></i>
           </div>
           <h1 class="auth-brand-title">sArathI</h1>
@@ -2380,7 +2404,12 @@ function renderAuthPage() {
 
             <div class="field">
               <label for="auth-password">Password</label>
-              <input id="auth-password" type="password" placeholder="••••••••" required autocomplete="current-password" />
+              <div class="password-input-wrap">
+                <input id="auth-password" type="password" placeholder="••••••••" required autocomplete="current-password" />
+                <button type="button" class="password-toggle-btn" data-target="auth-password" aria-label="Show password" title="Show or hide password">
+                  <i class="fa-solid fa-eye"></i>
+                </button>
+              </div>
             </div>
 
             <button type="submit" class="btn-primary" style="width:100%; margin-top:8px; padding:12px;">
@@ -2406,12 +2435,22 @@ function renderAuthPage() {
 
             <div class="field">
               <label for="reg-password">Password</label>
-              <input id="reg-password" type="password" placeholder="Minimum 6 characters" minlength="6" required autocomplete="new-password" />
+              <div class="password-input-wrap">
+                <input id="reg-password" type="password" placeholder="Minimum 6 characters" minlength="6" required autocomplete="new-password" />
+                <button type="button" class="password-toggle-btn" data-target="reg-password" aria-label="Show password" title="Show or hide password">
+                  <i class="fa-solid fa-eye"></i>
+                </button>
+              </div>
             </div>
 
             <div class="field">
               <label for="reg-confirm">Confirm Password</label>
-              <input id="reg-confirm" type="password" placeholder="Re-enter your password" minlength="6" required autocomplete="new-password" />
+              <div class="password-input-wrap">
+                <input id="reg-confirm" type="password" placeholder="Re-enter your password" minlength="6" required autocomplete="new-password" />
+                <button type="button" class="password-toggle-btn" data-target="reg-confirm" aria-label="Show password" title="Show or hide password">
+                  <i class="fa-solid fa-eye"></i>
+                </button>
+              </div>
             </div>
 
             <button type="submit" class="btn-primary" style="width:100%; margin-top:8px; padding:12px;">
@@ -2432,6 +2471,57 @@ function renderAuthPage() {
 function attachAuthHandlers() {
   const themeBtn = document.getElementById("authThemeToggleBtn");
   if (themeBtn) themeBtn.addEventListener("click", toggleTheme);
+
+  // Secret 3-click authorization toggle on YUKTARA brand icon
+  let logoClicks = 0;
+  let logoTimer = null;
+  const brandIcon = document.getElementById("authBrandIcon");
+  if (brandIcon) {
+    brandIcon.addEventListener("click", () => {
+      logoClicks++;
+      clearTimeout(logoTimer);
+      logoTimer = setTimeout(() => { logoClicks = 0; }, 1500);
+      if (logoClicks >= 3) {
+        logoClicks = 0;
+        const current = localStorage.getItem("yuktara_host_device") === "true";
+        if (current) {
+          localStorage.removeItem("yuktara_host_device");
+          state.auth.error = "Host device authorization disabled.";
+        } else {
+          localStorage.setItem("yuktara_host_device", "true");
+          state.auth.error = null;
+        }
+        render();
+      }
+    });
+  }
+
+  // Show / Hide password toggles for login and registration forms
+  document.querySelectorAll(".password-toggle-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const targetId = btn.getAttribute("data-target");
+      const input = document.getElementById(targetId);
+      if (!input) return;
+      const icon = btn.querySelector("i");
+      if (input.type === "password") {
+        input.type = "text";
+        if (icon) {
+          icon.classList.remove("fa-eye");
+          icon.classList.add("fa-eye-slash");
+        }
+        btn.setAttribute("aria-label", "Hide password");
+        btn.title = "Hide password";
+      } else {
+        input.type = "password";
+        if (icon) {
+          icon.classList.remove("fa-eye-slash");
+          icon.classList.add("fa-eye");
+        }
+        btn.setAttribute("aria-label", "Show password");
+        btn.title = "Show password";
+      }
+    });
+  });
 
   const tabLoginBtn = document.getElementById("tabLoginBtn");
   if (tabLoginBtn) {
@@ -2473,6 +2563,7 @@ function attachAuthHandlers() {
   const demoStudentBtn = document.getElementById("demoStudentBtn");
   if (demoStudentBtn) {
     demoStudentBtn.addEventListener("click", () => {
+      if (!isHostDevice()) return;
       const emailInput = document.getElementById("auth-email");
       const passInput = document.getElementById("auth-password");
       if (emailInput && passInput) {
@@ -2491,6 +2582,7 @@ function attachAuthHandlers() {
   const demoAdminBtn = document.getElementById("demoAdminBtn");
   if (demoAdminBtn) {
     demoAdminBtn.addEventListener("click", () => {
+      if (!isHostDevice()) return;
       const emailInput = document.getElementById("auth-email");
       const passInput = document.getElementById("auth-password");
       if (emailInput && passInput) {
@@ -2513,8 +2605,12 @@ function attachAuthHandlers() {
       const email = document.getElementById("auth-email").value.trim().toLowerCase();
       const password = document.getElementById("auth-password").value;
 
-      // Restrict admin login strictly to host machine
-      // Admin login is allowed from any device — role is enforced by PostgreSQL
+      // Restrict demo and admin logins to the authorized host device
+      if (!isHostDevice() && (email === "abc@gmail.com" || email === "admin@yuktara.edu")) {
+        state.auth.error = "Demo accounts are restricted to the authorized host device. Please sign in with your registered account or create a new one.";
+        render();
+        return;
+      }
 
       // UI feedback: Disable submit button and show authentication spinner
       const submitBtn = loginForm.querySelector("button[type='submit']");
