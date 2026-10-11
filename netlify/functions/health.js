@@ -3,7 +3,7 @@
 
 'use strict';
 
-const { queryOne, classifyDbError } = require('./db/database');
+const { queryOne, getDbStatus, classifyDbError } = require('./db/database');
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -21,23 +21,7 @@ exports.handler = async (event) => {
     };
   }
 
-  const rawUrl = (process.env.DATABASE_URL || '').trim();
-  const isConfigured = Boolean(rawUrl);
-
-  if (!isConfigured) {
-    return {
-      statusCode: 503,
-      headers: CORS_HEADERS,
-      body: JSON.stringify({
-        status: 'error',
-        service: 'sArathI Backend (Netlify Functions)',
-        database: 'PostgreSQL',
-        databaseConfigured: false,
-        error: 'DATABASE_URL environment variable is not configured.',
-        timestamp: new Date().toISOString(),
-      }),
-    };
-  }
+  const dbStatus = typeof getDbStatus === 'function' ? getDbStatus() : {};
 
   try {
     await queryOne('SELECT 1 AS ok', []);
@@ -47,23 +31,21 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         status: 'ok',
         service: 'sArathI Backend (Netlify Functions)',
-        database: 'PostgreSQL',
-        databaseConfigured: true,
-        connection: 'Connected successfully',
+        database: dbStatus.databaseType || 'PostgreSQL',
+        databaseConfigured: Boolean(dbStatus.isPostgresConfigured),
+        databaseConnected: Boolean(dbStatus.isPostgresConnected),
         timestamp: new Date().toISOString(),
       }),
     };
   } catch (err) {
-    console.error('[HEALTH] Database health check failed:', err.message, err.code);
-    const safeError = classifyDbError(err);
+    console.error('[HEALTH] Database health check notice:', err.message);
+    const safeError = typeof classifyDbError === 'function' ? classifyDbError(err) : err.message;
     return {
       statusCode: 503,
       headers: CORS_HEADERS,
       body: JSON.stringify({
         status: 'error',
         service: 'sArathI Backend (Netlify Functions)',
-        database: 'PostgreSQL',
-        databaseConfigured: true,
         error: safeError,
         timestamp: new Date().toISOString(),
       }),

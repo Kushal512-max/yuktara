@@ -45,14 +45,6 @@ exports.handler = async (event) => {
     });
   }
 
-  if (!process.env.DATABASE_URL || !process.env.DATABASE_URL.trim()) {
-    console.error('[AUTH-LOGIN] FATAL: DATABASE_URL is not set.');
-    return response(503, {
-      success: false,
-      error: 'Database is not configured. DATABASE_URL environment variable is missing in Netlify.',
-    });
-  }
-
   if (!schemaReady) {
     try {
       await initializeSchema();
@@ -165,7 +157,7 @@ exports.handler = async (event) => {
     });
   } catch (error) {
     console.error('[AUTH-LOGIN] Database error during login:', error.message, error.code);
-    const safeMessage = classifyDbError(error);
+    const safeMessage = typeof classifyDbError === 'function' ? classifyDbError(error) : (error.message || 'Login failed.');
 
     return response(500, {
       success: false,

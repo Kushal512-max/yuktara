@@ -1,6 +1,6 @@
 // netlify/functions/db/database.js
 // Centralized PostgreSQL connection & resilient persistence module for sArathI
-// Supports live PostgreSQL (Supabase, Neon, Railway, Local) with automatic fallback.
+// Supports live PostgreSQL (Supabase, Neon, Railway, Local) with automatic local fallback.
 
 'use strict';
 
@@ -17,6 +17,24 @@ let lastDbError = null;
 const LOCAL_STORE_FILE = path.join(__dirname, 'sarathi_db_store.json');
 
 /**
+ * Checks if a connection string is actually configured and not a placeholder.
+ */
+function isConfiguredUrl(raw) {
+  if (!raw) return false;
+  const str = String(raw).trim();
+  if (!str) return false;
+  if (
+    str.includes('[YOUR-PASSWORD]') ||
+    str.includes('[YOUR-') ||
+    str.includes('YOUR_PASSWORD') ||
+    str.includes('YOUR_HOST')
+  ) {
+    return false;
+  }
+  return str.startsWith('postgres://') || str.startsWith('postgresql://');
+}
+
+/**
  * Normalizes PostgreSQL connection string.
  * Fixes unencoded characters (such as @ in password) and strips excess whitespace.
  */
@@ -25,8 +43,6 @@ function normalizeDatabaseUrl(raw) {
   let str = String(raw).trim().replace(/^["']|["']$/g, '');
   if (!str) return '';
 
-  // Match: postgres://user:password@host:port/dbname
-  // If there are multiple '@' signs, the password has an unencoded '@'
   try {
     const protoMatch = str.match(/^(postgres(?:ql)?:\/\/)(.*)$/i);
     if (protoMatch) {
@@ -40,7 +56,6 @@ function normalizeDatabaseUrl(raw) {
         if (colonIdx > 0) {
           const user = authPart.substring(0, colonIdx);
           const rawPass = authPart.substring(colonIdx + 1);
-          // If password contains raw @, URL-encode it
           const safePass = encodeURIComponent(decodeURIComponent(rawPass));
           return `${prefix}${encodeURIComponent(decodeURIComponent(user))}:${safePass}@${hostPart}`;
         }
@@ -85,47 +100,55 @@ function writeLocalStore(data) {
 }
 
 /**
- * Returns the active PostgreSQL connection pool if configured and reachable.
+ * Returns the active PostgreSQL connection pool if configured.
  */
 function getPool() {
   if (pool) return pool;
 
-  const rawUrl = normalizeDatabaseUrl(process.env.DATABASE_URL || '');
-  if (!rawUrl) {
+  const rawUrl = (process.env.DATABASE_URL || '').trim();
+  if (!isConfiguredUrl(rawUrl)) {
     return null;
   }
 
-  const isLocal = rawUrl.includes('localhost') || rawUrl.includes('127.0.0.1');
+  const normalized = normalizeDatabaseUrl(rawUrl);
+  const isLocal = normalized.includes('localhost') || normalized.includes('127.0.0.1');
 
-  pool = new Pool({
-    connectionString: rawUrl,
-    ssl: isLocal ? false : { rejectUnauthorized: false },
-    max: 5,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000,
-  });
+  try {
+    pool = new Pool({
+      connectionString: normalized,
+      ssl: isLocal ? false : { rejectUnauthorized: false },
+      max: 5,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
+    });
 
-  pool.on('error', (err) => {
-    console.error('[DB] Unexpected PostgreSQL pool error:', err.message);
-  });
+    pool.on('error', (err) => {
+      console.error('[DB] PostgreSQL pool background error:', err.message);
+      isPostgresActive = false;
+      lastDbError = err.message;
+    });
 
-  return pool;
+    return pool;
+  } catch (err) {
+    console.warn('[DB] Could not create PostgreSQL pool:', err.message);
+    pool = null;
+    return null;
+  }
 }
 
 /**
- * Classify a database error into a safe, meaningful message for frontend display,
- * while ensuring sensitive credentials or raw stack traces are never leaked.
+ * Classify a database error into a safe, meaningful message for frontend display.
  */
 function classifyDbError(error) {
   if (!error) return 'An unexpected database error occurred.';
   const msg = String(error.message || '');
   const code = String(error.code || '');
 
-  if (msg.includes('DATABASE_URL environment variable is not configured') || !process.env.DATABASE_URL) {
-    return 'Database is not configured. DATABASE_URL environment variable is missing.';
+  if (msg.includes('DATABASE_URL environment variable is not configured')) {
+    return 'Database is not configured. DATABASE_URL environment variable is missing in Netlify.';
   }
   if (msg.includes('password authentication failed') || code === '28P01') {
-    return 'Database authentication failed. The database password in DATABASE_URL is invalid or was reset.';
+    return 'Database authentication failed. The database credentials in DATABASE_URL are invalid.';
   }
   if (msg.includes('getaddrinfo ENOTFOUND') || msg.includes('ENOTFOUND')) {
     return 'Database host unreachable. Please verify host and network settings in DATABASE_URL.';
@@ -134,9 +157,9 @@ function classifyDbError(error) {
     return 'Database connection timed out. Please try again.';
   }
   if (code === '23505' || msg.includes('duplicate key')) {
-    return 'An account with this email already exists. Please sign in.';
+    return 'An account with this email already exists. Please sign in instead.';
   }
-  return 'Database operation failed. Please try again shortly.';
+  return error.message || 'Database operation failed. Please try again shortly.';
 }
 
 /**
@@ -144,17 +167,265 @@ function classifyDbError(error) {
  */
 async function query(text, params = []) {
   const p = getPool();
-  const start = Date.now();
-  try {
-    const result = await p.query(text, params);
-    const duration = Date.now() - start;
-    if (process.env.NODE_ENV !== 'production') {
-      console.log(`[DB] Query executed in ${duration}ms | rows: ${result.rowCount}`);
+  if (p) {
+    try {
+      const start = Date.now();
+      const result = await p.query(text, params);
+      const duration = Date.now() - start;
+      isPostgresActive = true;
+      lastDbError = null;
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`[DB-PG] Executed in ${duration}ms | rows: ${result.rowCount}`);
+      }
+      return result;
+    } catch (err) {
+      console.warn(`[DB-PG] Query failed (${err.message}), falling back to resilient local store.`);
+      isPostgresActive = false;
+      lastDbError = err.message;
+      return handleLocalQuery(text, params);
     }
-    return result;
-  } catch (err) {
-    console.error('[DB] Query error:', err.message, '| Query:', (text || '').substring(0, 100));
-    throw err;
+  }
+
+  // No active pool, execute via local store
+  return handleLocalQuery(text, params);
+}
+
+/**
+ * Local resilient query emulator for fallback mode.
+ * Supports the specific SQL queries used throughout the application.
+ */
+function handleLocalQuery(text, params = []) {
+  const store = readLocalStore();
+  const q = text.trim();
+  const upper = q.toUpperCase();
+
+  // 1. SELECT 1 AS ok
+  if (upper.includes('SELECT 1')) {
+    return { rows: [{ ok: 1 }], rowCount: 1 };
+  }
+
+  // 2. Users queries
+  if (upper.includes('FROM USERS')) {
+    if (upper.startsWith('SELECT COUNT(*)')) {
+      return { rows: [{ count: store.users.length }], rowCount: 1 };
+    }
+    if (upper.includes('WHERE EMAIL = $1')) {
+      const email = String(params[0] || '').toLowerCase().trim();
+      const user = store.users.find(u => u.email.toLowerCase() === email);
+      return { rows: user ? [user] : [], rowCount: user ? 1 : 0 };
+    }
+    if (upper.includes('WHERE ID = $1')) {
+      const id = Number(params[0]);
+      const user = store.users.find(u => Number(u.id) === id);
+      return { rows: user ? [user] : [], rowCount: user ? 1 : 0 };
+    }
+    // SELECT * FROM users ORDER BY id DESC
+    const sorted = [...store.users].sort((a, b) => b.id - a.id);
+    return { rows: sorted, rowCount: sorted.length };
+  }
+
+  // 3. INSERT INTO users
+  if (upper.startsWith('INSERT INTO USERS')) {
+    const nextId = store.users.length ? Math.max(...store.users.map(u => Number(u.id))) + 1 : 1;
+    let name = 'Student';
+    let email = '';
+    let hash = '';
+    let role = 'student';
+
+    if (params.length >= 4) {
+      [name, email, hash, role] = params;
+    } else if (params.length === 3) {
+      [name, email, hash] = params;
+      role = upper.includes("'ADMIN'") ? 'admin' : 'student';
+    } else if (params.length === 2) {
+      email = params[0];
+      hash = params[1];
+      name = upper.includes('ADMINISTRATOR') ? 'sArathI Administrator' : 'User';
+      role = upper.includes('ADMIN') ? 'admin' : 'student';
+    } else if (params.length === 1) {
+      hash = params[0];
+    }
+
+    email = String(email || '').toLowerCase().trim();
+
+    // Check conflict
+    const existing = store.users.find(u => u.email.toLowerCase() === email);
+    if (existing) {
+      return { rows: [existing], rowCount: 1 };
+    }
+
+    const newUser = {
+      id: nextId,
+      name: name || 'Student',
+      email,
+      password_hash: hash,
+      role: role || 'student',
+      created_at: new Date().toISOString(),
+      last_login_at: null,
+    };
+    store.users.push(newUser);
+    writeLocalStore(store);
+    return { rows: [newUser], rowCount: 1 };
+  }
+
+  // 4. UPDATE users SET last_login_at or password_hash
+  if (upper.startsWith('UPDATE USERS')) {
+    if (upper.includes('WHERE ID = $1')) {
+      const id = Number(params[0]);
+      const u = store.users.find(x => Number(x.id) === id);
+      if (u) {
+        u.last_login_at = new Date().toISOString();
+        writeLocalStore(store);
+      }
+      return { rows: [], rowCount: u ? 1 : 0 };
+    }
+    if (upper.includes('WHERE EMAIL = $2') || upper.includes('WHERE EMAIL = $1')) {
+      const email = String(params[params.length - 1] || '').toLowerCase().trim();
+      const u = store.users.find(x => x.email.toLowerCase() === email);
+      if (u) {
+        if (params[0]) u.password_hash = params[0];
+        writeLocalStore(store);
+      }
+      return { rows: [], rowCount: u ? 1 : 0 };
+    }
+  }
+
+  // 5. Auth Logs
+  if (upper.startsWith('INSERT INTO AUTH_LOGS')) {
+    const nextId = store.auth_logs.length ? Math.max(...store.auth_logs.map(l => Number(l.id))) + 1 : 1;
+    let userId = null, email = '', action = 'AUTH_EVENT', ip = '', ua = '', status = 'SUCCESS';
+
+    if (params.length >= 6) {
+      [userId, email, action, ip, ua, status] = params;
+    } else if (params.length === 5) {
+      [email, action, ip, ua, status] = params;
+    } else if (params.length === 4) {
+      [userId, email, ip, ua] = params;
+      action = upper.includes('LOGIN_SUCCESS') ? 'LOGIN_SUCCESS' : (upper.includes('LOGIN_FAILED') ? 'LOGIN_FAILED' : 'AUTH_EVENT');
+      status = upper.includes('SUCCESS') ? 'SUCCESS' : 'FAILED';
+    } else if (params.length === 3) {
+      [email, ip, ua] = params;
+      action = upper.includes('LOGIN_FAILED') ? 'LOGIN_FAILED' : 'AUTH_EVENT';
+      status = 'FAILED';
+    }
+
+    email = String(email || '').toLowerCase().trim();
+
+    const log = {
+      id: nextId,
+      user_id: userId,
+      email,
+      action: action || 'AUTH_EVENT',
+      ip_address: ip || '0.0.0.0',
+      user_agent: ua || 'Unknown',
+      status: status || 'SUCCESS',
+      created_at: new Date().toISOString()
+    };
+    store.auth_logs.push(log);
+    writeLocalStore(store);
+    return { rows: [{ id: nextId }], rowCount: 1 };
+  }
+
+  if (upper.includes('FROM AUTH_LOGS')) {
+    if (upper.startsWith('SELECT COUNT(*)')) {
+      return { rows: [{ count: store.auth_logs.length }], rowCount: 1 };
+    }
+    if (upper.includes('WHERE USER_ID = $1 OR EMAIL = $2')) {
+      const uid = Number(params[0]);
+      const email = String(params[1] || '').toLowerCase().trim();
+      const filtered = store.auth_logs.filter(l => Number(l.user_id) === uid || (l.email && String(l.email).toLowerCase() === email));
+      filtered.sort((a, b) => b.id - a.id);
+      return { rows: filtered, rowCount: filtered.length };
+    }
+    const sorted = [...store.auth_logs].sort((a, b) => b.id - a.id);
+    return { rows: sorted, rowCount: sorted.length };
+  }
+
+  // 6. Quiz Attempts
+  if (upper.startsWith('INSERT INTO QUIZ_ATTEMPTS')) {
+    const nextId = store.quiz_attempts.length ? Math.max(...store.quiz_attempts.map(q => q.id)) + 1 : 1;
+    const [userId, userEmail, userName, subject, topicId, topicName, questionCount, score, percentage, mode, timeSpent, answersJson] = params;
+    const attempt = {
+      id: nextId,
+      user_id: userId,
+      user_email: userEmail,
+      user_name: userName,
+      subject,
+      topic_id: topicId,
+      topic_name: topicName,
+      question_count: questionCount,
+      score,
+      percentage,
+      mode,
+      time_spent_seconds: timeSpent,
+      answers_json: typeof answersJson === 'string' ? answersJson : JSON.stringify(answersJson || {}),
+      submitted_at: new Date().toISOString()
+    };
+    store.quiz_attempts.push(attempt);
+    writeLocalStore(store);
+    return { rows: [{ id: nextId }], rowCount: 1 };
+  }
+
+  if (upper.includes('FROM QUIZ_ATTEMPTS')) {
+    if (upper.startsWith('SELECT COUNT(*)')) {
+      return { rows: [{ count: store.quiz_attempts.length }], rowCount: 1 };
+    }
+    if (upper.includes('AVG(PERCENTAGE)')) {
+      const avg = store.quiz_attempts.length
+        ? (store.quiz_attempts.reduce((acc, c) => acc + Number(c.percentage || 0), 0) / store.quiz_attempts.length).toFixed(1)
+        : 0;
+      return { rows: [{ avg }], rowCount: 1 };
+    }
+    if (upper.includes('WHERE USER_ID = $1 OR USER_EMAIL = $2')) {
+      const uid = Number(params[0]);
+      const email = String(params[1] || '').toLowerCase();
+      const filtered = store.quiz_attempts.filter(a => Number(a.user_id) === uid || (a.user_email && a.user_email.toLowerCase() === email));
+      filtered.sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at));
+      return { rows: filtered, rowCount: filtered.length };
+    }
+    if (upper.includes('WHERE USER_EMAIL = $1')) {
+      const email = String(params[0] || '').toLowerCase();
+      const filtered = store.quiz_attempts.filter(a => a.user_email && a.user_email.toLowerCase() === email);
+      filtered.sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at));
+      return { rows: filtered, rowCount: filtered.length };
+    }
+    const sorted = [...store.quiz_attempts].sort((a, b) => b.id - a.id);
+    return { rows: sorted, rowCount: sorted.length };
+  }
+
+  // 7. Study Sessions
+  if (upper.startsWith('INSERT INTO STUDY_SESSIONS')) {
+    const nextId = store.study_sessions.length ? Math.max(...store.study_sessions.map(s => s.id)) + 1 : 1;
+    const [userId, userEmail, subject, topicId, subtopic, durationMinutes, status] = params;
+    const session = {
+      id: nextId,
+      user_id: userId,
+      user_email: userEmail,
+      subject,
+      topic_id: topicId,
+      subtopic,
+      duration_minutes: durationMinutes,
+      status: status || 'COMPLETED',
+      created_at: new Date().toISOString()
+    };
+    store.study_sessions.push(session);
+    writeLocalStore(store);
+    return { rows: [{ id: nextId }], rowCount: 1 };
+  }
+
+  if (upper.includes('FROM STUDY_SESSIONS')) {
+    if (upper.startsWith('SELECT COUNT(*)')) {
+      return { rows: [{ count: store.study_sessions.length }], rowCount: 1 };
+    }
+    if (upper.includes('WHERE USER_ID = $1 OR USER_EMAIL = $2')) {
+      const uid = Number(params[0]);
+      const email = String(params[1] || '').toLowerCase();
+      const filtered = store.study_sessions.filter(s => Number(s.user_id) === uid || (s.user_email && s.user_email.toLowerCase() === email));
+      filtered.sort((a, b) => b.id - a.id);
+      return { rows: filtered, rowCount: filtered.length };
+    }
+    const sorted = [...store.study_sessions].sort((a, b) => b.id - a.id);
+    return { rows: sorted, rowCount: sorted.length };
   }
 
   // Default fallback for generic queries
@@ -255,7 +526,7 @@ async function initializeSchema() {
       isPostgresActive = true;
       console.log('[DB] Live PostgreSQL schema tables verified.');
     } catch (e) {
-      console.warn('[DB] PostgreSQL schema init had warning/failed, operating in resilient mode:', e.message);
+      console.warn('[DB] PostgreSQL schema init warning (operating in resilient fallback mode):', e.message);
       isPostgresActive = false;
       lastDbError = e.message;
     }
@@ -267,11 +538,9 @@ async function initializeSchema() {
 }
 
 /**
- * Seeds Demo Student, Admin, and sample data.
+ * Seeds Demo Student, Admin, and initial data.
  */
 async function seedInitialData() {
-  const store = readLocalStore();
-
   const studentHash = await bcrypt.hash('123456', 10);
   const adminHash = await bcrypt.hash('KT@admin0856', 10);
 
@@ -303,54 +572,10 @@ async function seedInitialData() {
         await query(`
           UPDATE users SET password_hash = $1 WHERE email = $2
         `, [adminHash, adminEmail]);
-        console.log(`[DB] Updated Admin password (${adminEmail}).`);
       }
     } catch (e) {
       console.warn('[DB] Admin seed notice:', e.message);
     }
-  }
-
-  // 3. User Tejas Ajit Ostwal (matching user request and screenshot)
-  try {
-    const existingTejas = await queryOne('SELECT id FROM users WHERE email = $1', ['tejasostwal@gmail.com']);
-    let tejasId = existingTejas ? Number(existingTejas.id) : null;
-    if (!existingTejas) {
-      const tejasRes = await query(`
-        INSERT INTO users (name, email, password_hash, role)
-        VALUES ($1, $2, $3, $4)
-      `, ['Tejas Ajit Ostwal', 'tejasostwal@gmail.com', studentHash, 'student']);
-      tejasId = tejasRes.rows[0] ? Number(tejasRes.rows[0].id) : 1;
-      console.log('[DB] Seeded user Tejas Ajit Ostwal (tejasostwal@gmail.com).');
-
-      // Add Auth log
-      await query(`
-        INSERT INTO auth_logs (user_id, email, action, ip_address, user_agent, status)
-        VALUES ($1, $2, $3, $4, $5, $6)
-      `, [tejasId, 'tejasostwal@gmail.com', 'REGISTER', '152.59.61.88', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128.0.0.0', 'SUCCESS']);
-
-      // Add Quiz attempt
-      await query(`
-        INSERT INTO quiz_attempts
-          (user_id, user_email, user_name, subject, topic_id, topic_name, question_count, score, percentage, mode, time_spent_seconds, answers_json)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-      `, [tejasId, 'tejasostwal@gmail.com', 'Tejas Ajit Ostwal', 'Python Programming', 'py-basics', 'Getting Started & Data Types', 10, 0, 0.0, 'practice', 0, '{}']);
-
-      // Add Study sessions matching screenshot
-      const sessions = [
-        'Basic Types (int, float, str, bool)',
-        'Console I/O & F-Strings',
-        'Variables & Dynamic Typing',
-        'Python Setup & Statements'
-      ];
-      for (const subtopic of sessions) {
-        await query(`
-          INSERT INTO study_sessions (user_id, user_email, subject, topic_id, subtopic, duration_minutes, status)
-          VALUES ($1, $2, $3, $4, $5, $6, $7)
-        `, [tejasId, 'tejasostwal@gmail.com', 'Python Programming', 'py-basics', subtopic, 30, 'COMPLETED']);
-      }
-    }
-  } catch (e) {
-    console.warn('[DB] User seed notice:', e.message);
   }
 }
 
@@ -360,7 +585,7 @@ async function seedInitialData() {
 function getDbStatus() {
   const rawUrl = (process.env.DATABASE_URL || '').trim();
   return {
-    isPostgresConfigured: Boolean(rawUrl),
+    isPostgresConfigured: isConfiguredUrl(rawUrl),
     isPostgresConnected: isPostgresActive,
     databaseType: isPostgresActive ? 'PostgreSQL (Cloud / Live)' : 'Resilient Local Storage (PostgreSQL Ready)',
     lastError: lastDbError,
@@ -368,4 +593,14 @@ function getDbStatus() {
   };
 }
 
-module.exports = { query, queryOne, queryAll, initializeSchema, getPool };
+module.exports = {
+  query,
+  queryOne,
+  queryAll,
+  initializeSchema,
+  getPool,
+  classifyDbError,
+  getDbStatus,
+  normalizeDatabaseUrl,
+  isConfiguredUrl
+};

@@ -149,9 +149,9 @@ const server = http.createServer(async (req, res) => {
       const result = await handler(event, {});
       return sendNetlifyResponse(res, result);
     } catch (err) {
-      console.error(`[SERVER] Handler error for ${pathname}:`, err.message);
+      console.error(`[SERVER] Handler error for ${pathname}:`, err.stack || err.message);
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ success: false, error: 'Internal server error.' }));
+      return res.end(JSON.stringify({ success: false, error: err.message || 'Internal server error.' }));
     }
   }
 

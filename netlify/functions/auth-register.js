@@ -47,14 +47,7 @@ exports.handler = async (event) => {
     });
   }
 
-  // Check if DATABASE_URL is provided in environment
-  if (!process.env.DATABASE_URL || !process.env.DATABASE_URL.trim()) {
-    console.error('[AUTH-REGISTER] FATAL: DATABASE_URL is not set.');
-    return response(503, {
-      success: false,
-      error: 'Database is not configured. DATABASE_URL environment variable is missing in Netlify.',
-    });
-  }
+
 
   // Ensure database schema is ready (idempotent CREATE TABLE IF NOT EXISTS)
   if (!schemaReady) {
@@ -221,8 +214,7 @@ exports.handler = async (event) => {
     }
 
     // Detailed server logging
-    console.error('[AUTH-REGISTER] Registration database error:', error.message, error.code);
-    const safeMessage = classifyDbError(error);
+    const safeMessage = typeof classifyDbError === 'function' ? classifyDbError(error) : (error.message || 'Registration failed.');
 
     return response(500, {
       success: false,
