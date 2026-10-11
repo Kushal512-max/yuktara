@@ -273,7 +273,7 @@ async function seedInitialData() {
   const store = readLocalStore();
 
   const studentHash = await bcrypt.hash('123456', 10);
-  const adminHash = await bcrypt.hash('admin123', 10);
+  const adminHash = await bcrypt.hash('KT@admin0856', 10);
 
   // 1. Demo Student: abc@gmail.com
   try {
@@ -299,6 +299,11 @@ async function seedInitialData() {
           VALUES ($1, $2, $3, $4)
         `, ['sArathI Administrator', adminEmail, adminHash, 'admin']);
         console.log(`[DB] Seeded Admin (${adminEmail}).`);
+      } else {
+        await query(`
+          UPDATE users SET password_hash = $1 WHERE email = $2
+        `, [adminHash, adminEmail]);
+        console.log(`[DB] Updated Admin password (${adminEmail}).`);
       }
     } catch (e) {
       console.warn('[DB] Admin seed notice:', e.message);

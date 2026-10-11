@@ -2379,7 +2379,7 @@ function renderAuthPage() {
             <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; border-top:1px dashed var(--border-color); padding-top:8px;">
               <div class="demo-credentials-info">
                 <span class="demo-credentials-title" style="color:#ef4444;"><i class="fa-solid fa-shield-halved"></i> Admin Demo:</span>
-                <span class="demo-credentials-text">admin@sarathi.edu &bull; admin123</span>
+                <span class="demo-credentials-text">admin@sarathi.edu &bull; KT@admin0856</span>
               </div>
               <button type="button" class="demo-fill-btn" id="demoAdminBtn" style="border-color:rgba(239,68,68,0.4); color:#ef4444;">
                 <i class="fa-solid fa-key"></i> Use Admin
@@ -2587,7 +2587,7 @@ function attachAuthHandlers() {
       const passInput = document.getElementById("auth-password");
       if (emailInput && passInput) {
         emailInput.value = "admin@sarathi.edu";
-        passInput.value = "admin123";
+        passInput.value = "KT@admin0856";
         const form = document.getElementById("loginForm");
         if (form && typeof form.requestSubmit === "function") {
           form.requestSubmit();
